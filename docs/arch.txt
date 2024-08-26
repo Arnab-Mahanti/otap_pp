@@ -1,0 +1,34 @@
+option 1:
+
+
+Trajectory : Interface : getFreeState()
+
+DefaultTrajectory : (a,b,c) : getFreeState, helpGUI
+FluxTrajectory : (m, n) : getFreeState, helpGUI
+
+TrajectoryFactory : getTrajectory("default", "flux")
+
+
+event1
+GUI->Factory->GUI->DefaultTrajectory.helpGUI()
+
+
+event2
+GUI->
+
+Tractory>
+		Default> on click > Factory > DefaultTrajectory > return GUI features
+			a
+			b
+			c
+		Flux>
+
+
+
+option 2:
+TrajectoryData : interface
+FluxTrajectoryData : (a,b,c) : getFreeState
+DefaultTrajectoryData : (m, n) : getFreeState
+
+
+Trajctory<TrajectoryData>

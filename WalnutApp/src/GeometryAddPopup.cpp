@@ -1,0 +1,239 @@
+
+
+#include "GeometryAddPopup.h"
+#include "otap.h"
+
+GeometryAddPopup geometryAddPopup;
+
+void GeometryAddPopup::OpenPopup(std::function<void(ImRad::ModalResult)> clb)
+{
+    callback = clb;
+    modalResult = ImRad::None;
+    // animator.Start(ImRad::Animator::OpenPopup);
+    ImGui::OpenPopup("###GeometryAddPopup");
+    isOpen = true;
+    Init();
+}
+
+void GeometryAddPopup::ClosePopup(ImRad::ModalResult mr)
+{
+    modalResult = mr;
+    // animator.Start(ImRad::Animator::ClosePopup);
+    isOpen = false;
+}
+
+void GeometryAddPopup::Init()
+{
+}
+
+void GeometryAddPopup::Draw()
+{
+    /// @style test
+    /// @unit px
+    /// @begin TopWindow
+    if (isOpen)
+    {
+        auto *ioUserData = (ImRad::IOUserData *)ImGui::GetIO().UserData;
+
+        // TODO: Add support for dpi
+        // auto dp = ioUserData->dpiScale;
+        // ID = ImGui::GetID("###GeometryAddPopup");
+
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), 0, {0.5f, 0.5f}); // Center
+        ImGui::SetNextWindowSize({450 /* * dp*/, 250 /* * dp*/});
+        bool tmpOpen = true;
+        if (ImGui::BeginPopupModal("Add Geometry###GeometryAddPopup", &tmpOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
+        {
+            if (modalResult != ImRad::None)
+            {
+                ImGui::CloseCurrentPopup();
+                if (modalResult != ImRad::Cancel)
+                    callback(modalResult);
+            }
+            /// @separator
+
+            // TODO: Add Draw calls of dependent popup windows here
+
+            /// @begin Table
+            if (ImGui::BeginTable("table1", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
+                ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Text
+                ImGui::TextUnformatted("Type");
+                /// @end Text
+
+                /// @begin Combo
+                ImRad::TableNextColumn(2);
+                ImGui::SetNextItemWidth(200);
+                ImGui::Combo("##m_SelectedGeometryType", &m_SelectedGeometryType, OTAP::GetTypes<OTAP::GeometryPrimitiveType>().c_str());
+                /// @end Combo
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @begin Table
+            if (ImGui::BeginTable("table2", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
+                ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Text
+                ImGui::TextUnformatted("Length");
+                /// @end Text
+
+                /// @begin Input
+                ImRad::TableNextColumn(2);
+                ImGui::SetNextItemWidth(200);
+                ImGui::InputDouble("##m_GeometryLength", &m_GeometryLength, 1, 0.0, "%.3f");
+                // if (ImGui::IsItemActive())
+                //     ioUserData->imeType = ImRad::ImeText;
+                /// @end Input
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @begin Table
+            if (ImGui::BeginTable("table3", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
+                ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Text
+                ImGui::TextUnformatted("Angle");
+                /// @end Text
+
+                /// @begin Slider
+                ImRad::TableNextColumn(2);
+                ImGui::SetNextItemWidth(200);
+                ImGui::SliderAngle("##m_GeometryAngle", &m_GeometryAngle, -180, 180, nullptr);
+                /// @end Slider
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @begin Table
+            if (ImGui::BeginTable("table4", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
+                ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Text
+                ImGui::TextUnformatted("Radius");
+                /// @end Text
+
+                /// @begin Input
+                ImRad::TableNextColumn(2);
+                ImGui::SetNextItemWidth(200);
+                ImGui::InputDouble("##m_GeometryRadius", &m_GeometryRadius, 1, 0.0, "%.3f");
+                // if (ImGui::IsItemActive())
+                //     ioUserData->imeType = ImRad::ImeText;
+                /// @end Input
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @begin Table
+            if (ImGui::BeginTable("table5", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
+                ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Text
+                ImGui::TextUnformatted("Sweep");
+                /// @end Text
+
+                /// @begin Slider
+                ImRad::TableNextColumn(2);
+                ImGui::SetNextItemWidth(200);
+                ImGui::SliderAngle("##m_GeometrySweep", &m_GeometrySweep, -180, 180, nullptr);
+                /// @end Slider
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @begin Table
+            if (ImGui::BeginTable("table6", 3, ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
+            {
+                ImGui::TableSetupColumn("left-stretch", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableSetupColumn("content", ImGuiTableColumnFlags_WidthFixed, 0);
+                ImGui::TableSetupColumn("right-stretch", ImGuiTableColumnFlags_WidthStretch, 0);
+                ImGui::TableNextRow(0, 0);
+                ImGui::TableSetColumnIndex(0);
+                /// @separator
+
+                /// @begin Button
+                ImRad::TableNextColumn(1);
+                ImGui::Button("Add", {0, 0});
+                if (ImGui::IsItemClicked())
+                    PushGeometry();
+                /// @end Button
+
+                /// @separator
+                ImGui::EndTable();
+            }
+            /// @end Table
+
+            /// @separator
+            ImGui::EndPopup();
+        }
+    }
+    /// @end TopWindow
+}
+
+std::string GeometryAddPopup::GetGeometryTypes() const
+{
+    auto types = magic_enum::enum_names<OTAP::GeometryPrimitiveType>();
+    std::string s = "";
+    for (auto &&i : types)
+    {
+        s.append(i);
+        s += '\0';
+    }
+
+    return s;
+}
+
+void GeometryAddPopup::PushGeometry()
+{
+    auto &otap = OTAP::Engine::GetInstance();
+    otap.geometry.Push(
+        OTAP::GetTypeAtIndex<OTAP::GeometryPrimitiveType>(m_SelectedGeometryType),
+        m_GeometryLength,
+        m_GeometryAngle,
+        m_GeometryRadius,
+        m_GeometrySweep);
+
+    ClosePopup(ImRad::ModalResult::Ok);
+}

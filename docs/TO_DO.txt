@@ -1,0 +1,1 @@
+Make all solver types as static data in a problem and choose dynamically
