@@ -16,38 +16,6 @@
 
 #include "otap.h"
 
-template <int t>
-struct test
-{
-    int a = t;
-};
-
-enum class type
-{
-    a,
-    b,
-    c
-};
-
-struct data
-{
-    double d;
-    double e;
-    data(double a, double b) : d(a), e(b) {}
-    ~data()
-    {
-        d = 0;
-        e = 0;
-        //  std::cout << "destroyed{" << d << " " << e << "}\n";
-    }
-};
-
-auto process(std::valarray<double> v)
-{
-    v = v.apply(std::log10);
-
-    return std::vector(std::begin(v), std::end(v));
-}
 int main()
 {
     using namespace OTAP;
@@ -135,49 +103,43 @@ int main()
     //     T0,
     //     300);
 
+    // VanDriestSolver solver(
+    //     CoordinateType::Axisym,
+    //     FlowType::Turbulent,
+    //     fluid,
+    //     geom.GetComponents()[1],
+    //     7.6612,
+    //     traj.GetPinf(t_result),
+    //     traj.GetVinf(t_result),
+    //     P0,
+    //     T0,
+    //     Me,
+    //     Te,
+    //     Pe,
+    //     300,
+    //     1000000,
+    //     0);
 
+    auto res = make_HFSolver( HFSolverType::Eckert,
+            CoordinateType::Axisym,
+            FlowType::Turbulent,
+            fluid,
+            geom.GetComponents()[1],
+            7.6612,
+            traj.GetPinf(t_result),
+            traj.GetVinf(t_result),
+            P0,
+            T0,
+            Me,
+            Te,
+            Pe,
+            300.0,
+            0000000.0,
+            0.0);
 
-    VanDriestSolver solver(
-        CoordinateType::Axisym,
-        FlowType::Turbulent,
-        fluid,
-        geom.GetComponents()[1],
-        7.6612,
-        traj.GetPinf(t_result),
-        traj.GetVinf(t_result),
-        P0,
-        T0,
-        Me,
-        Te,
-        Pe,
-        300,
-        1000000,
-        0);
+    //  res->Solve();
 
-
-
-// auto res = make_HFSolver( HFSolverType::Eckert,
-//         CoordinateType::Axisym,
-//         FlowType::Turbulent,
-//         fluid,
-//         geom.GetComponents()[1],
-//         7.6612,
-//         traj.GetPinf(t_result),
-//         traj.GetVinf(t_result),
-//         P0,
-//         T0,
-//         Me,
-//         Te,
-//         Pe,
-//         300.0,
-//         0000000.0,
-//         0);
-
-
-
-//  res->Solve();
-
- //   auto res = solver.Solve();
+    //   auto res = solver.Solve();
 
     // std::cout << t_result.size() << "\n";
 
@@ -193,99 +155,92 @@ int main()
     //     out_res << t_result[i] << " " << res.q[i] << " " << res.h[i] << " " << res.Tg[i] << '\n';
     // }
 
-OTAP::Material mat1(121,2800,960,0.3,5000,5000);
+    OTAP::Material mat1(121, 2800, 960, 0.3, 5000, 5000);
 
-Layer l1(mat1,1,10);
-Layer l2(mat1,1,10);
+    Layer l1(mat1, 1, 10);
+    Layer l2(mat1, 1, 10);
 
+    TimeSeries initT(3);
 
-TimeSeries initT(3);
+    initT[0] = 300;
+    initT[1] = 300;
+    initT[2] = 300;
 
-initT[0]=300;
-initT[1]=300;
-initT[2]=300;
+    LayerStack LH;
+    LH.Push(l1);
+    LH.Push(l2);
 
-LayerStack LH;
-LH.Push(l1);
-LH.Push(l2);
+    LH.InitTemperature(initT);
+    LH.CreateNodes();
 
+    // std::cout << LH.Nodes[1].k() << "\n";
 
-LH.InitTemperature(initT);
-LH.CreateNodes();
+    ResponseSolverParams params;
 
-//std::cout << LH.Nodes[1].k() << "\n";
+    params.tInit = 0.0;
+    params.tFinal;
+    params.timestep = {{0, 0}};
+    params.innerRadius;
+    params.massRateChar = 0.0;
+    params.massRatePyro = 0.0;
+    params.propellantMass = {{0, 0}};
 
-ResponseSolverParams params;
+    // Frontwall radiation
+    params.qRad = {{0, 0}};
+    params.TRad = 300.0;
+    // Table qGen;
 
-        params.tInit = 0.0;
-        params.tFinal;
-        params.timestep={{0,0}};
-       params.innerRadius;
-       params.massRateChar = 0.0;
-        params.massRatePyro = 0.0;
-        params.propellantMass={{0,0}};
+    // Backwall radiation and convection
+    params.hBackwall = 0.0; // FIXME: Give Options for h and characteristic length for natural convection
+    params.TgBackwall = 300.0;
+    params.TRadBackwall = 300.0;
 
-        // Frontwall radiation
-        params.qRad={{0,0}};
-        params.TRad = 300.0;
-        // Table qGen;
+    ResponseSolverOptions options_1;
 
-        // Backwall radiation and convection
-        params.hBackwall = 0.0; // FIXME: Give Options for h and characteristic length for natural convection
-        params.TgBackwall = 300.0;
-        params.TRadBackwall = 300.0;
+    options_1.coordinateType = CoordinateType::Axisym;
+    options_1.Ttol = 1.0;
 
- ResponseSolverOptions options_1;
+    auto hfs1 = make_HFSolver(HFSolverType::VanDriest,
+                              CoordinateType::Axisym,
+                              FlowType::Turbulent,
+                              fluid,
+                              geom.GetComponents()[1],
+                              7.6612,
+                              traj.GetPinf(t_result),
+                              traj.GetVinf(t_result),
+                              P0,
+                              T0,
+                              Me,
+                              Te,
+                              Pe,
+                              300.0,
+                              0000000.0,
+                              0);
 
- options_1.coordinateType = CoordinateType::Axisym;
- options_1.Ttol = 1.0;
+    auto hfs2 = make_HFSolver(HFSolverType::VanDriest,
+                              CoordinateType::Axisym,
+                              FlowType::Turbulent,
+                              fluid,
+                              geom.GetComponents()[1],
+                              7.6612,
+                              traj.GetPinf(t_result),
+                              traj.GetVinf(t_result),
+                              P0,
+                              T0,
+                              Me,
+                              Te,
+                              Pe,
+                              300.0,
+                              0000000.0,
+                              0);
 
-//  DefaultResponseSolver Solver
-//  (
-//     &LH, 
-//     make_HFSolver(HFSolverType::VanDriest,
-//         CoordinateType::Axisym,
-//         FlowType::Turbulent,
-//         fluid,
-//         geom.GetComponents()[1],
-//         7.6612,
-//         traj.GetPinf(t_result),
-//         traj.GetVinf(t_result),
-//         P0,
-//         T0,
-//         Me,
-//         Te,
-//         Pe,
-//         300.0,
-//         0000000.0,
-//         0),
-//        make_HFSolver(HFSolverType::VanDriest,
-//         CoordinateType::Axisym,
-//         FlowType::Turbulent,
-//         fluid,
-//         geom.GetComponents()[1],
-//         7.6612,
-//         traj.GetPinf(t_result),
-//         traj.GetVinf(t_result),
-//         P0,
-//         T0,
-//         Me,
-//         Te,
-//         Pe,
-//         300.0,
-//         0000000.0,
-//         0),
-//     initT, 
-//     params, 
-//     options_1
-// );
+    DefaultResponseSolver Solver(
+        &LH, hfs1, hfs2,
+        initT,
+        params,
+        options_1);
 
-
-
-
-
-
-// CreateNodes();
+    // CreateNodes();
 
     return 0;
 }

@@ -2,11 +2,7 @@
 #include "Eigen/Dense"
 #include "Eigen/Cholesky"
 #include "Eigen/LU"
-
-
-
-
-
+#include <cmath>
 
 OTAP::HFResult OTAP::FayRiddellSolver::Solve(double time)
 {
@@ -1078,132 +1074,162 @@ OTAP::HFResult OTAP::FreeMolecularSolver::Solve(double time)
     return Result;
 }
 
+// FOR CYLINDRICAL/SPHERICAL COORDINATE TRANSFORMATION (RADIUS != 0)
+void OTAP::DefaultResponseSolver::CYSP2(double &A1, double &B1, double &C1, double k, double Inverse_ratio)
+{
+    double Coordinate_ratio, COORDINATE_COEF;
+    if (m_options.coordinateType == CoordinateType::Cartesian)
+    {
+        COORDINATE_COEF = 0;
+    }
+    else if (m_options.coordinateType == CoordinateType::Cylindrical)
+    {
+        COORDINATE_COEF = 1;
+    }
+    else if (m_options.coordinateType == CoordinateType::Spherical)
+    {
+        COORDINATE_COEF = 2;
+    }
+    else
+    {
+        COORDINATE_COEF = 0;
+    }
 
-using namespace Eigen;
+    Coordinate_ratio = (COORDINATE_COEF * k) / pow(Inverse_ratio, 2);
+    A1 = A1 + Coordinate_ratio;
+    B1 = B1 - 2 * Coordinate_ratio;
+    C1 = C1 + Coordinate_ratio;
+}
+
+// FOR CYLINDRICAL/SPHERICAL COORDINATE TRANSFORMATION (RADIUS == 0)
+void OTAP::DefaultResponseSolver::CYSP1(double &A1, double &C1, double k, double Layer_thickness, double Inverse_ratio, double Outer_radius_instantaneous)
+{
+    double Coordinate_ratio, COORDINATE_COEF;
+    if (m_options.coordinateType == CoordinateType::Cartesian)
+    {
+        COORDINATE_COEF = 0;
+    }
+    else if (m_options.coordinateType == CoordinateType::Cylindrical)
+    {
+        COORDINATE_COEF = 1;
+    }
+    else if (m_options.coordinateType == CoordinateType::Spherical)
+    {
+        COORDINATE_COEF = 2;
+    }
+    else
+    {
+        COORDINATE_COEF = 0;
+    }
+
+    Coordinate_ratio = (COORDINATE_COEF * k * Layer_thickness) / (2 * Inverse_ratio * Outer_radius_instantaneous);
+    A1 = A1 + Coordinate_ratio;
+    C1 = C1 + Coordinate_ratio;
+}
 
 OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
 
 {
-    double heat_transfer_coefficient_outer , Tg, delt, Qradiation;
+    using namespace Eigen;
+    double heat_transfer_coefficient_outer, Tg, delt, Qradiation;
     heat_transfer_coefficient_outer = 0;
-    Tg=0;
-    delt=0;
-    Qradiation =0;
+    Tg = 0;
+    delt = 0;
+    Qradiation = 0;
 
-    auto nodes = m_Layers -> Nodes ;
-    auto numnodes = m_Layers -> NumNodes ;
+    auto nodes = m_Layers->Nodes;
+    auto numnodes = m_Layers->NumNodes;
 
-   // (*m_Layers)[0].thickness
+    // (*m_Layers)[0].thickness
 
+    double Total_thickness;
+    Total_thickness = 0;
+    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
+    {
+        Total_thickness = Total_thickness + (*m_Layers)[i].thickness;
+    }
 
-     
-     double Total_thickness;
-     Total_thickness=0;
-     for(size_t i=0; i< (*m_Layers).GetCount(); i++)
-     {
-        Total_thickness = Total_thickness +  (*m_Layers)[i].thickness ;
-     }
+    MatrixXd A, B;
+    VectorXd T, SS;
+    A = MatrixXd::Zero(numnodes[numnodes.size()], numnodes[numnodes.size()]);
+    B = MatrixXd::Zero(numnodes[numnodes.size()], 1);
+    T = VectorXd::Constant(numnodes[numnodes.size()], 0);
+    SS = VectorXd::Constant(numnodes[numnodes.size()], 0);
 
-     MatrixXd A,B;
-     VectorXd T,SS;
-     A = MatrixXd::Zero(numnodes[numnodes.size()],numnodes[numnodes.size()]);
-	 B = MatrixXd::Zero(numnodes[numnodes.size()], 1);
-     T = VectorXd::Constant(numnodes[numnodes.size()], 0);
-     SS = VectorXd::Constant(numnodes[numnodes.size()], 0);
+    for (size_t i = 0; i < numnodes[numnodes.size() - 1]; i++)
+    {
+        T(i) = nodes[i].T;
+    }
 
-    for(size_t i=0; i< numnodes[numnodes.size()-1]; i++)
-     {
-        T(i) = nodes[i].T ;
-     }
+    VectorXd Inverse_nodes;
 
-     VectorXd Inverse_nodes;
+    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
+    {
+        Inverse_nodes(i) = 1 / (*m_Layers)[i].numNodes;
+    }
 
-         for(size_t i=0; i< (*m_Layers).GetCount(); i++)
-     {
-        Inverse_nodes(i) = 1/(*m_Layers)[i].numNodes ;
-     }
+    double MPD, MCD, CPG, Outer_radius_instantaneous, Outer_Radius, Layer_thickness_0, Layer_thickness_1, Initial_Layer_thickness_1, Initial_Layer_thickness_0;
 
-    double MPD, MCD, CPG, Outer_radius_instantaneous, Outer_Radius, Layer_thickness_0, Layer_thickness_1,  Initial_Layer_thickness_1 ,  Initial_Layer_thickness_0; 
+    Outer_Radius = m_params.innerRadius + Total_thickness;
+    VectorXd Layer_thickness, Initial_Layer_thickness;
 
-     Outer_Radius = m_params.innerRadius + Total_thickness ;
-    VectorXd Layer_thickness,Initial_Layer_thickness;
+    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
+    {
 
-      for(size_t i=0; i< (*m_Layers).GetCount(); i++)
-     {
+        Layer_thickness(i) = (*m_Layers)[i].thickness;
+        Initial_Layer_thickness(i) = (*m_Layers)[i].thickness;
+    }
 
-     Layer_thickness(i) =  (*m_Layers)[i].thickness ;
-     Initial_Layer_thickness(i) = (*m_Layers)[i].thickness ;
-
-     }
-    
-
-      
-   
-
-	 if (m_options.coordinateType != CoordinateType::Cartesian) {
-	 	Outer_radius_instantaneous = Outer_Radius - Initial_Layer_thickness_0 - Initial_Layer_thickness_1 + Layer_thickness(0) + Layer_thickness(1);
-	 }
+    if (m_options.coordinateType != CoordinateType::Cartesian)
+    {
+        Outer_radius_instantaneous = Outer_Radius - Initial_Layer_thickness_0 - Initial_Layer_thickness_1 + Layer_thickness(0) + Layer_thickness(1);
+    }
 
     double AA1_s, AA2_s, BB1_s, BB2_s, CC1_s, CC2_s, DD1_s, DD2_s;
-	double sigma;
-	sigma = 5.67 * pow(10, -8);
-	MPD = m_params.massRatePyro;
-	MCD = m_params.massRateChar;
-	CPG = nodes[0].Cppyrogas(nodes[0].T);
+    double sigma;
+    sigma = 5.67 * pow(10, -8);
+    MPD = m_params.massRatePyro;
+    MCD = m_params.massRateChar;
+    CPG = nodes[0].Cppyrogas(nodes[0].T);
 
+    if (Layer_thickness_0 != 0)
+    {
+        if (MCD != 0)
+        {
+            A(0, 0) = 1;
+            A(0, 1) = 0;
+            B(0, 0) = nodes[0].Tabl();
+        }
 
+        else if (MCD == 0)
+        {
+            AA2_s = nodes[0].k() / std::pow(Inverse_nodes(0), 2) - (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0));
+            BB2_s = -((3 * nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2)))) - (((nodes[0].rho() * nodes[0].Cp()) / delt) * Layer_thickness(0) * Layer_thickness(0));
+            CC2_s = ((nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2))) + (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0)));
+            DD2_s = -(((nodes[0].rho() * nodes[0].Cp()) / delt) * T(0) * Layer_thickness(0) * Layer_thickness(0)) - SS(0) * Layer_thickness(0) * Layer_thickness(0);
 
-	if (Layer_thickness_0 != 0)
-	{
-		if (MCD != 0)
-		{
-			A(0, 0) = 1;
-			A(0, 1) = 0;
-			B(0, 0) = nodes[0].Tabl();
+            if (m_options.coordinateType != CoordinateType::Cartesian)
+            {
 
-		}
+                if (Outer_radius_instantaneous <= 0.0000001)
+                {
+                    CYSP2(AA2_s, BB2_s, CC2_s, nodes[0].k(), Inverse_nodes(0));
+                }
+                else if (Outer_radius_instantaneous > 0.0000001)
+                {
+                    CYSP1(AA2_s, CC2_s, nodes[0].k(), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                }
+            }
 
-		else if (MCD == 0)
-		{
-			AA2_s = nodes[0].k() / std::pow(Inverse_nodes(0), 2) - (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0));
-			BB2_s = -((3 * nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2)))) - (((nodes[0].rho() * nodes[0].Cp()) / delt) * Layer_thickness(0) * Layer_thickness(0));
-			CC2_s = ((nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2))) + (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0)));
-			DD2_s = -(((nodes[0].rho() * nodes[0].Cp()) / delt) * T(0) * Layer_thickness(0) * Layer_thickness(0)) - SS(0) * Layer_thickness(0) * Layer_thickness(0);
+            AA1_s = nodes[0].k() / (2 * Inverse_nodes(0));
+            BB1_s = heat_transfer_coefficient_outer * Layer_thickness(0);
+            CC1_s = -nodes[0].k() / (2 * Inverse_nodes(0));
+            DD1_s = (heat_transfer_coefficient_outer * Tg - nodes[0].emissivity() * sigma * (pow(T(0), 4) - pow(m_params.TRad, 4)) + Qradiation) * Layer_thickness(0);
 
-			if (m_options.coordinateType != CoordinateType::Cartesian)
-			{
-
-				if (Outer_radius_instantaneous <= 0.0000001)
-				{
-					CYSP2(AA2_s, BB2_s, CC2_s, nodes[0].k(), Inverse_nodes(0), m_options);
-				}
-				else if (Outer_radius_instantaneous > 0.0000001)
-				{
-					CYSP1(AA2_s, CC2_s, nodes[0].k(), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous, m_options);
-				}
-
-			}
-
-
-
-
-			AA1_s = nodes[0].k() / (2 * Inverse_nodes(0));
-			BB1_s = heat_transfer_coefficient_outer * Layer_thickness(0);
-			CC1_s = -nodes[0].k() / (2 * Inverse_nodes(0));
-			DD1_s = (heat_transfer_coefficient_outer * Tg - nodes[0].emissivity() * sigma * (pow(T(0), 4)-pow(m_params.TRad,4)) + Qradiation) * Layer_thickness(0);
-
-
-
-
-			A(0, 0) = BB1_s * AA2_s - AA1_s * BB2_s;
-			A(0, 1) = AA2_s * CC1_s - AA1_s * CC2_s;
-			B(0, 0) = AA2_s * DD1_s - AA1_s * DD2_s;
-
-		}
-
-
-
-    
+            A(0, 0) = BB1_s * AA2_s - AA1_s * BB2_s;
+            A(0, 1) = AA2_s * CC1_s - AA1_s * CC2_s;
+            B(0, 0) = AA2_s * DD1_s - AA1_s * DD2_s;
+        }
     }
     m_ContinuumSolver->Solve(300);
     return ResponseResult();
