@@ -237,10 +237,14 @@ namespace OTAP
     template <typename... Args>
     std::shared_ptr<AmbientBase> make_ambient(AmbientType T, Args &&...args)
     {
-        if (T == AmbientType::ISA)
-            return std::make_shared<ISA_Ambient>(std::forward<Args>(args)...);
-        else
+        switch (T)
+        {
+        case AmbientType::ISA:
+            return safe_make_shared<ISA_Ambient>(std::forward<Args>(args)...);
+        default:
             assert(false);
+            return nullptr;
+        }
     }
 
     using Ambient = std::shared_ptr<AmbientBase>;

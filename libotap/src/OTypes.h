@@ -8,9 +8,11 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <memory>
 #include <functional>
-#include "magic_enum/magic_enum.h"
 #include "mlinterp/mlinterp.hpp"
+#include "magic_enum/magic_enum.h"
+#include "rapidcsv/rapidcsv.h"
 
 #define DEBUG
 
@@ -26,6 +28,9 @@
 
 namespace OTAP
 {
+    using TimePoints = std::vector<double>;
+    using TimeSeries = std::vector<double>;
+
     enum class GeometryPrimitiveType
     {
         StagnationPoint,
@@ -55,7 +60,7 @@ namespace OTAP
 
     enum class ResponseSolverType
     {
-
+        Default
     };
 
     enum class OptimizationSolverType
@@ -66,9 +71,8 @@ namespace OTAP
     enum class CoordinateType
     {
         Cartesian,
-        Cylindrical,
-        Spherical,
-        Axisym
+        Axisym,
+        Spherical
     };
 
     enum class FlowType
@@ -133,112 +137,32 @@ namespace OTAP
         return std::string(magic_enum::enum_name<T>(t));
     }
 
-    // FIXME: Test this class for issues
-    class vector : public std::vector<double>
-    {
-    private:
-        /* data */
-    public:
-        vector() : std::vector<double>() {}
-        vector(std::size_t s) : std::vector<double>(s) {}
-        vector(std::size_t s, double val) : std::vector<double>(s, val) {}
-        vector(std::initializer_list<double> v) : std::vector<double>(v) {}
-        vector(const vector &_x) = default;
-        vector(const std::vector<double> &v) : std::vector<double>(v) {}
-        vector(vector &&) noexcept = default;
-        ~vector() = default;
-        operator std::valarray<double>()
-        {
-            return std::valarray<double>(this->data(), this->size());
-        }
-    };
-
     class CpData
     {
         std::vector<double> m_Mach;
-        std::vector<double> m_Cp;
         std::vector<double> m_Positions;
+        std::vector<double> m_Cp;
 
     public:
         CpData(const std::vector<double> &Mach, const std::vector<double> &Pos, const std::vector<double> &Cp)
             : m_Mach(Mach), m_Positions(Pos), m_Cp(Cp) {}
-        CpData(const std::string &filename);
+        CpData(const std::string &filename, const bool delim_whitespace = true);
         CpData(const CpData &) = default; // copy constructor
         explicit CpData() = default;      // Explicit default constructor
 
-        inline double GetCp(double Mach, double Pos) const;
-        inline std::vector<double> GetCp(const std::vector<double> &Mach, const std::vector<double> &Pos) const;
+        double GetCp(double Mach, double Pos) const;
+        std::vector<double> GetCp(const std::vector<double> &Mach, const std::vector<double> &Pos) const;
     };
 
-    // FIXME: Make parser robust
-    inline OTAP::CpData::CpData(const std::string &filename)
+    template <typename T, typename... Args>
+    std::shared_ptr<T> safe_make_shared(Args &&...args)
     {
-        std::ifstream file(filename);
-        std::string m = "";
-        std::string pos = "";
-        std::string line = "";
-        std::string cp = "";
-        std::getline(file, line);
-
-        // Parse Mach nos.
-        std::istringstream ss(line);
-        while (!ss.eof())
-        {
-            ss >> m;
-            m_Mach.push_back(std::stod(m));
-            m = "";
-        }
-
-        for (auto &&i : m_Mach)
-        {
-            //   std::cout << i << " ";
-        }
-        //  std::cout << "\n";
-
-        // Parse Cp data
-        while (!file.eof())
-        {
-            std::getline(file, line);
-            std::istringstream ss(line);
-            ss >> pos;
-            m_Positions.push_back(std::stod(pos));
-            pos = "";
-            while (!ss.eof())
-            {
-                ss >> m;
-                m_Cp.push_back(std::stod(m));
-                m = "";
-            }
-        }
+        if constexpr (std::is_constructible_v<T, Args &&...>)
+            return std::make_shared<T>(std::forward<Args>(args)...);
+        else
+            return nullptr;
     }
 
-    inline double OTAP::CpData::GetCp(double Mach, double Pos) const
-    {
-        double cp = 0.0;
-        size_t dim[] = {m_Mach.size(), m_Positions.size()};
-        mlinterp::interp<mlinterp::rnatord>(dim, size_t(1), m_Cp.data(), &cp, m_Mach.data(), &Mach, m_Positions.data(), &Pos);
-        return cp;
-    }
-
-    std::vector<double> OTAP::CpData::GetCp(const std::vector<double> &Mach, const std::vector<double> &Pos) const
-    {
-        assert(Mach.size() == Pos.size());
-        std::vector<double> cp(Mach.size(), 0.0);
-
-        size_t dim[] = {m_Mach.size(), m_Positions.size()};
-        mlinterp::interp<mlinterp::rnatord>(dim, cp.size(), m_Cp.data(), cp.data(), m_Mach.data(), Mach.data(), m_Positions.data(), Pos.data());
-
-        return cp;
-    }
-
-    // std::function<double(double)> OTAP::CpData::GetCpVsM(double pos)
-    // {
-    //     // size_t dim[] = {m_Mach.size(), m_Positions.size()};
-    //     // mlinterp::interp<mlinterp::rnatord>(dim, cp.size(), m_Cp.data(), cp.data(), m_Mach.data(), Mach.data(), m_Positions.data(), Pos.data());
-    // }
-
-    using TimePoints = std::vector<double>;
-    using TimeSeries = std::vector<double>;
 } // namespace OTAP
 
 #endif // _OTYPES_H

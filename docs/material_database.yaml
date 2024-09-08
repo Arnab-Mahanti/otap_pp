@@ -1,0 +1,66 @@
+schema:
+ "density:
+    T: [,]
+    val: [,]
+  char_density:
+    T: [,]
+    val: [,]
+  pyrogas_density:
+    T: [,]
+    val: [,]
+  conductivity:
+    T: [,]
+    val: [,]
+  char_conductivity:
+    T: [,]
+    val: [,]
+  specific_heat:
+    T: [,]
+    val: [,]
+  char_specific_heat:
+    T: [,]
+    val: [,]
+  pyrogas_specific_heat:
+    T: [,]
+    val: [,]
+  emissivity:
+    T: [,]
+    val: [,]
+  pyrolysis_temperature:
+  ablation_temperature:
+  pyrolysis_enthalpy:
+  ablation_enthalpy: "
+
+data:
+  aluminium:
+    density:
+      T: [250,2000]
+      val: [2800,2800]
+    char_density:
+      T: [250,2000]
+      val: [2800,2800]
+    pyrogas_density:
+      T: [250,2000]
+      val: [0,0]
+    conductivity:
+      T: [250,2000]
+      val: [121,121]
+    char_conductivity:
+      T: [250,2000]
+      val: [121,121]
+    specific_heat:
+      T: [250,2000]
+      val: [963,963]
+    char_specific_heat:
+      T: [250,2000]
+      val: [963,963]
+    pyrogas_specific_heat:
+      T: [250,2000]
+      val: [0,0]
+    emissivity:
+      T: [250,2000]
+      val: [0.12,0.12]
+    pyrolysis_temperature: 10000
+    ablation_temperature: 10000
+    pyrolysis_enthalpy: 1.0e+9
+    ablation_enthalpy: 1.0e+9

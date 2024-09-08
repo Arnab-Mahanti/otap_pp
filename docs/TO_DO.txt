@@ -1,1 +1,8 @@
 Make all solver types as static data in a problem and choose dynamically
+
+Table:
+    Scale
+    Bias
+
+Optimization
+BLT (Cp)

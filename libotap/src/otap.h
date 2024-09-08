@@ -6,6 +6,7 @@
 #include "Trajectory.h"
 #include "Problem.h"
 #include "MaterialLayer.h"
+#include "Table.h"
 
 #include <memory>
 #include <cassert>

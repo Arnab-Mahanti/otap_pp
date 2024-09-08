@@ -12,35 +12,43 @@ namespace OTAP
     class Node
     {
     private:
-        Material m_Material;
+        std::shared_ptr<Material> m_Material;
 
     public:
-        Node(Material material, double tinit = 300.0) : m_Material(material), T(tinit) {}
+        Node(std::shared_ptr<Material> material, double tinit = 300.0) : m_Material(material), T(tinit) {}
         ~Node() = default;
         Node(const Node &) = default;
 
         double T;
-        double k() { return m_Material.k(T); }
-        double rho() { return m_Material.rho(T); }
-        double rhochar() { return m_Material.rhochar(T); }
-        double rhopyrogas() { return m_Material.rhopyrogas(T); }
-        double Cp() { return m_Material.Cp(T); }
-        double Cpchar(double T) { return m_Material.Cpchar(T); }
-        double Cppyrogas(double T) { return m_Material.Cppyrogas(T); }
-        double emissivity() { return m_Material.emissivity(T); }
-        double Tabl() { return m_Material.Tabl(); }
-        double Tpyro() { return m_Material.Tpyro(); }
-        double Habl(double T) { return m_Material.Habl(T); }
-        double Hpyro(double T) { return m_Material.Hpyro(T); }
+        double k() { return m_Material->k[T]; }
+        double rho() { return m_Material->rho[T]; }
+        double rhochar() { return m_Material->rhochar[T]; }
+        double rhopyrogas() { return m_Material->rhopyrogas[T]; }
+        double Cp() { return m_Material->Cp[T]; }
+        double Cpchar() { return m_Material->Cpchar[T]; }
+        double Cppyrogas() { return m_Material->Cppyrogas[T]; }
+        double emissivity() { return m_Material->emissivity[T]; }
+        double Tabl() { return m_Material->Tabl; }
+        double Tpyro() { return m_Material->Tpyro; }
+        double Habl() { return m_Material->Habl; }
+        double Hpyro() { return m_Material->Hpyro; }
+        double k(double pT) { return m_Material->k[pT]; }
+        double rho(double pT) { return m_Material->rho[pT]; }
+        double rhochar(double pT) { return m_Material->rhochar[pT]; }
+        double rhopyrogas(double pT) { return m_Material->rhopyrogas[pT]; }
+        double Cp(double pT) { return m_Material->Cp[pT]; }
+        double Cpchar(double pT) { return m_Material->Cpchar[pT]; }
+        double Cppyrogas(double pT) { return m_Material->Cppyrogas[pT]; }
+        double emissivity(double pT) { return m_Material->emissivity[pT]; }
     };
 
     struct Layer
     {
-        Material material;
+        std::shared_ptr<Material> material;
         double thickness;
         size_t numNodes;
 
-        Layer(Material mat, double thickness, size_t numNodes = 10)
+        Layer(std::shared_ptr<Material> mat, double thickness, size_t numNodes = 10)
             : material(mat), thickness(thickness), numNodes(std::max(size_t(2), numNodes))
         {
         }
@@ -85,7 +93,7 @@ namespace OTAP
         Layer &at(size_t index) { return m_Layers.at(index); }
 
         // FIXME: Remove temperature initializers from layerstack;
-    //private:
+    private:
         void InitTemperature(double Tinit)
         {
             if (!NodesAreValid)

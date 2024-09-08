@@ -4,37 +4,26 @@
 #include <iomanip>
 #include "mlinterp/mlinterp.hpp"
 #include "Fluid.h"
+#include "rapidcsv/rapidcsv.h"
+
 namespace OTAP
 {
-    // FIXME: Make parser robust
-    void VelocityTrajectory::ReadTrajectory(const std::string &filename)
+    void VelocityTrajectory::ReadTrajectory(const std::string &filename, const bool delim_whitespace)
     {
-        std::ifstream file(filename);
-        std::map<double, std::vector<double>> data;
-        std::vector<double> line(6, 0.0);  // 6?
-        std::string t;
-        std::getline(file, t); // skip first line
-        while (!file.eof())
+        rapidcsv::Document trajdata(filename,
+                                    rapidcsv::LabelParams(-1, -1),
+                                    delim_whitespace ? rapidcsv::SeparatorParams() : rapidcsv::SeparatorParams(false, ',', true),
+                                    rapidcsv::ConverterParams(),
+                                    rapidcsv::LineReaderParams(true, '#', true));
+        if (trajdata.GetColumnCount() > 3)
         {
-            // time
-            file >> t;
-            std::string s;
-            if (t == "")
-                break;
-
-            for (size_t i = 0; i < 6; i++)
-            {
-                file >> s;
-                line[i] = std::stod(s);
-            }
-            data[std::stod(t)] = std::vector(line.begin(), line.begin() + 3);
-            t = "";
+            m_timepoints = trajdata.GetColumn<double>(0);
+            m_altitude = trajdata.GetColumn<double>(1);
+            m_velocity = trajdata.GetColumn<double>(2);
         }
-        for (auto &&i : data)
+        else
         {
-            m_timepoints.push_back(i.first);
-            m_altitude.push_back(i.second[0]);
-            m_velocity.push_back(i.second[1]);
+            assert(trajdata.GetColumnCount() >= 3);
         }
     }
 

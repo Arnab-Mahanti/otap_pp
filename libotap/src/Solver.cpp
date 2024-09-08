@@ -1082,7 +1082,7 @@ void OTAP::DefaultResponseSolver::CYSP2(double &A1, double &B1, double &C1, doub
     {
         COORDINATE_COEF = 0;
     }
-    else if (m_options.coordinateType == CoordinateType::Cylindrical)
+    else if (m_options.coordinateType == CoordinateType::Axisym)
     {
         COORDINATE_COEF = 1;
     }
@@ -1109,7 +1109,7 @@ void OTAP::DefaultResponseSolver::CYSP1(double &A1, double &C1, double k, double
     {
         COORDINATE_COEF = 0;
     }
-    else if (m_options.coordinateType == CoordinateType::Cylindrical)
+    else if (m_options.coordinateType == CoordinateType::Axisym)
     {
         COORDINATE_COEF = 1;
     }
@@ -1136,7 +1136,7 @@ OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
     Tg = 0;
     delt = 0;
     Qradiation = 0;
-
+    
     auto nodes = m_Layers->Nodes;
     auto numnodes = m_Layers->NumNodes;
 

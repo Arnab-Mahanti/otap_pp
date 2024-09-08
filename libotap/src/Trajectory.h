@@ -45,7 +45,7 @@ namespace OTAP
 
         std::shared_ptr<AmbientBase> m_ambient;
         std::shared_ptr<FluidBase> m_fluid;
-        void ReadTrajectory(const std::string &filename);
+        void ReadTrajectory(const std::string &filename, const bool delim_whatispace = true);
 
     public:
         VelocityTrajectory(const AmbientType &ambientType, const FluidType &fluidType, TimePoints &time, const TimeSeries &altitude, const TimeSeries &velocity, const TimeSeries &alpha)
@@ -92,18 +92,14 @@ namespace OTAP
     template <typename... Args>
     std::shared_ptr<TrajectoryBase> make_trajectory(TrajectoryType T, Args &&...args)
     {
-        if (T == TrajectoryType::Velocity)
+        switch (T)
+        {
+        case TrajectoryType::Velocity:
             return std::make_shared<VelocityTrajectory>(std::forward<Args>(args)...);
-        // else if (T == TrajectoryType::Mach)
-        //     return std::make_unique<MachTrajectory>(std::forward<Args>(args)...);
-        // else if (T == TrajectoryType::Flux)
-        //     return std::make_unique<FluxTrajectory>(std::forward<Args>(args)...);
-        // else if (T == TrajectoryType::Wind_Tunnel)
-        //     return std::make_unique<TunnelTrajectory>(std::forward<Args>(args)...);
-        // else if (T == TrajectoryType::CFD_Data)
-        //     return std::make_unique<CFDTrajectory>(std::forward<Args>(args)...);
-        else
+        default:
             assert(false);
+            return nullptr;
+        }
     }
     using Trajectory = std::shared_ptr<TrajectoryBase>;
 

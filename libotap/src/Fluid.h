@@ -415,12 +415,16 @@ namespace OTAP
     template <typename... Args>
     std::shared_ptr<FluidBase> make_fluid(FluidType T, Args &&...args)
     {
-        if (T == FluidType::Hansen_Air)
-            return std::make_shared<Hansen>(std::forward<Args>(args)...);
-        if (T == FluidType::Perfect)
-            return std::make_shared<PerfectGas>(std::forward<Args>(args)...);
-        else
+        switch (T)
+        {
+        case FluidType::Hansen_Air:
+            return safe_make_shared<Hansen>(std::forward<Args>(args)...);
+        case FluidType::Perfect:
+            return safe_make_shared<PerfectGas>(std::forward<Args>(args)...);
+        default:
             assert(false);
+            return nullptr;
+        }
     }
 
     // class ShockBase
