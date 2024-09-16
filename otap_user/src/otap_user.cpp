@@ -14,7 +14,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-
+#include <matplot/matplot.h>
 #include "otap.h"
 
 int main()
@@ -169,7 +169,7 @@ int main()
     // // initT[1] = 300;
     // // initT[2] = 300;
 
-    // // LayerStack LH;
+    // // LayerMesh LH;
     // // LH.Push(l1);
     // // LH.Push(l2);
 
@@ -306,13 +306,6 @@ int main()
                                 FluidType::Hansen_Air,
                                 "C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/trajectory.dat");
 
-    auto layers = std::make_shared<LayerStack>();
-    layers->Emplace(cp, 0, 5);
-    layers->Emplace(cp, 0.0, 5);
-    layers->Emplace(al, 0.002, 5);
-
-    TimeSeries Tinit{300, 300, 300, 300};
-
     auto hf = make_HFSolver(HFSolverType::KnBridged,
                             0.7,
                             std::initializer_list<double>{},
@@ -336,8 +329,16 @@ int main()
     params.timestep = {{0, 150}, {.1, .1}};
     params.Ttol = 0.01;
 
+    LayerStack layers;
+    layers.Emplace(cp, 0, 5);
+    layers.Emplace(cp, 0.0, 5);
+    layers.Emplace(al, 0.002, 5);
+
+    auto mesh = std::make_shared<LayerMesh>(layers);
+    TimeSeries Tinit{300, 300, 300, 300};
+
     auto response = make_ResponseSolver(ResponseSolverType::Default,
-                                        layers,
+                                        mesh,
                                         hf,
                                         Tinit,
                                         bcs,
@@ -366,6 +367,18 @@ int main()
     }
 
     std::cout << "Computed in: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << "ms \n";
+
+    // std::vector<double> backwall;
+
+    // std::transform(solution.solution_T.begin(), solution.solution_T.end(),
+    //                std::back_inserter(backwall), [](auto &&v)
+    //                { return v[v.size() - 1]; });
+
+    // matplot::plot(solution.solution_t, backwall, "b--")
+    //     ->line_width(1.5);
+    // matplot::xlabel("Time(s)");
+    // matplot::ylabel("Temperature");
+    // matplot::show();
 
     return 0;
 }

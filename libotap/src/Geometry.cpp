@@ -31,7 +31,12 @@
 
 void OTAP::Geometry::Push(OTAP::GeometryPrimitiveType T, double length, double angle, double radius, double sweep)
 {
-    m_geometryComponents.push_back({T, length, angle, radius, sweep});
+    m_geometryComponents.push_back({T, length, angle, radius, sweep, LayerStack()});
+}
+
+void OTAP::Geometry::Push(OTAP::GeometryPrimitiveType T, double length, double angle, double radius, double sweep, OTAP::LayerStack ls)
+{
+    m_geometryComponents.push_back({T, length, angle, radius, sweep, ls});
 }
 
 double OTAP::Geometry::GetRunningLength(size_t index) const

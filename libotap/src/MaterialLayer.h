@@ -3,7 +3,6 @@
 #include "OTypes.h"
 #include "Material.h"
 #include "mlinterp/mlinterp.hpp"
-#include "Solver.h"
 #include <numeric>
 #include <memory>
 
@@ -56,44 +55,51 @@ namespace OTAP
         ~Layer() = default;
     };
 
-    /// @brief Material layout from outside to inside
     class LayerStack
     {
     private:
         std::vector<Layer> m_Layers;
 
     public:
-        bool NodesAreValid = false;
-        std::vector<Node> Nodes;
-        std::vector<size_t> NumNodes;
-
-        LayerStack(/* args */) = default;
-        ~LayerStack() = default;
-
+        LayerStack() = default;
+        LayerStack(std::initializer_list<Layer> layers) : m_Layers(layers) {}
         void Push(const Layer &layer)
         {
             m_Layers.push_back(layer);
-            NodesAreValid = false;
         }
-
         template <typename... Args>
         void Emplace(Args &&...args)
         {
             m_Layers.emplace_back(std::forward<Args>(args)...);
-            NodesAreValid = false;
         }
-
         void Delete(const size_t index)
         {
             m_Layers.erase(m_Layers.begin() + index);
-            NodesAreValid = false;
         }
         auto GetCount() const { return m_Layers.size(); }
         auto &GetComponents() const { return m_Layers; }
         Layer &operator[](size_t index) noexcept { return m_Layers[index]; }
         Layer &at(size_t index) { return m_Layers.at(index); }
+    };
 
-        // FIXME: Remove temperature initializers from layerstack;
+    /// @brief Material layout from outside to inside
+    class LayerMesh
+    {
+    private:
+        std::shared_ptr<LayerStack> m_layers;
+
+    public:
+        bool NodesAreValid = false;
+        std::vector<Node> Nodes;
+        std::vector<size_t> NumNodes;
+
+        LayerMesh(std::shared_ptr<LayerStack> ls) : m_layers(ls) {}
+        LayerMesh(LayerStack ls) : m_layers(new LayerStack(ls)) {}
+        ~LayerMesh() = default;
+        auto GetCount() const { return m_layers->GetCount(); }
+        auto &GetComponents() const { return m_layers->GetComponents(); }
+        Layer &operator[](size_t index) noexcept { return m_layers->operator[](index); }
+
     private:
         void InitTemperature(double Tinit)
         {
@@ -109,18 +115,19 @@ namespace OTAP
 
         void InitTemperature(TimeSeries Tinit)
         {
+            auto &m_Layers = *m_layers;
             if (!NodesAreValid)
             {
                 CreateNodes();
             }
-            assert(Tinit.size() == (m_Layers.size() + 1));
+            assert(Tinit.size() == (m_Layers.GetCount() + 1));
 
             for (size_t j = NumNodes[0]; j < NumNodes[1]; j++)
             {
                 Nodes[j].T = Tinit[0] + (Tinit[1] - Tinit[0]) * (j - NumNodes[0]) / (NumNodes[1] - 1 - NumNodes[0]);
             }
 
-            for (size_t i = 1; i < GetCount(); i++)
+            for (size_t i = 1; i < m_Layers.GetCount(); i++)
             {
                 for (size_t j = NumNodes[i]; j < NumNodes[i + 1]; j++)
                 {
@@ -133,6 +140,7 @@ namespace OTAP
         void CreateNodes()
         {
             // First Layer (one additional node)
+            auto &m_Layers = *m_layers;
             for (size_t j = 0; j < m_Layers[0].numNodes + 1; j++)
             {
                 Nodes.emplace_back(m_Layers[0].material);
@@ -141,7 +149,7 @@ namespace OTAP
             NumNodes.push_back(m_Layers[0].numNodes + 1);
 
             // Subsequent Layer
-            for (size_t i = 1; i < GetCount(); i++)
+            for (size_t i = 1; i < m_Layers.GetCount(); i++)
             {
                 for (size_t j = 0; j < m_Layers[i].numNodes; j++)
                 {

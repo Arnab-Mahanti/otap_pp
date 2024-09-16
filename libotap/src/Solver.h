@@ -332,16 +332,16 @@ namespace OTAP
     class ResponseSolverBase // FIXME: Enforce heat flux solver to have trajectory
     {
     protected:
-        std::shared_ptr<LayerStack> m_Layers;
+        std::shared_ptr<LayerMesh> m_Layers;
         BCArray m_BCs;
 
     public:
-        ResponseSolverBase(std::shared_ptr<LayerStack> layers, TimeSeries Tinit, BCArray BCs)
+        ResponseSolverBase(std::shared_ptr<LayerMesh> layers, TimeSeries Tinit, BCArray BCs)
             : m_Layers(layers), m_BCs(BCs)
         {
             m_Layers->InitTemperature(Tinit);
         };
-        ResponseSolverBase(std::shared_ptr<LayerStack> layers, double Tinit, BCArray BCs)
+        ResponseSolverBase(std::shared_ptr<LayerMesh> layers, double Tinit, BCArray BCs)
             : m_Layers(layers), m_BCs(BCs)
         {
             m_Layers->InitTemperature(Tinit);
@@ -391,7 +391,7 @@ namespace OTAP
 
     public:
         // template <typename T>
-        DefaultResponseSolver(std::shared_ptr<LayerStack> layers, HFSolver hfsolver, TimeSeries Tinit, BCArray BCs, ResponseSolverParams params, ResponseSolverOptions options)
+        DefaultResponseSolver(std::shared_ptr<LayerMesh> layers, HFSolver hfsolver, TimeSeries Tinit, BCArray BCs, ResponseSolverParams params, ResponseSolverOptions options)
             : ResponseSolverBase(layers, Tinit, BCs), m_params(params), m_options(options), m_HFSolver(hfsolver) { m_Fluid = m_HFSolver->GetFluid(); }
         virtual ~DefaultResponseSolver() = default;
         virtual ResponseResult Solve() override;

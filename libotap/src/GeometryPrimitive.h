@@ -2,6 +2,8 @@
 #define _GEOMETRY_PRIMITIVE_H
 
 #include "OTypes.h"
+#include "MaterialLayer.h"
+#include <cmath>
 
 namespace OTAP
 {
@@ -13,7 +15,8 @@ namespace OTAP
         double angle;
         double radius;
         double lambda;
-        
+        LayerStack layers = LayerStack();
+
         double Total_Length();
 
         bool isPlate() const

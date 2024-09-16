@@ -10,7 +10,7 @@ namespace OTAP
     class Geometry
     {
     private:
-        std::vector<GeometryPrimitive> m_geometryComponents;
+        std::vector<GeometryPrimitive> m_geometryComponents; 
         
     public:
         double m_characteristicLength=1.0;
@@ -21,6 +21,7 @@ namespace OTAP
         }
         
         void Push(OTAP::GeometryPrimitiveType T, double length, double angle, double radius, double sweep);
+        void Push(OTAP::GeometryPrimitiveType T, double length, double angle, double radius, double sweep, LayerStack ls);
 
         //NOTE: Template disabled
 
