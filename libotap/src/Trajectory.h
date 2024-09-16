@@ -32,6 +32,7 @@ namespace OTAP
         virtual double GetRhoinf(double) const { assert(false); };
         virtual double GetMinf(double) const { assert(false); };
         virtual double GetVinf(double) const { assert(false); };
+        virtual double GetLambdainf(double) const { assert(false); };
 
         // virtual void helpGui(){assert(false);};
     };
@@ -68,7 +69,44 @@ namespace OTAP
         virtual double GetRhoinf(double) const override;
         virtual double GetMinf(double) const override;
         virtual double GetVinf(double) const override;
+        virtual double GetLambdainf(double) const override;
     };
+
+    class MachTrajectory : public TrajectoryBase
+    {
+        TimePoints m_timepoints;
+        TimeSeries m_altitude;
+        TimeSeries m_mach;
+        TimeSeries m_alpha;
+
+        std::shared_ptr<AmbientBase> m_ambient;
+        std::shared_ptr<FluidBase> m_fluid;
+        void ReadTrajectory(const std::string &filename, const bool delim_whatispace = true);
+
+    public:
+        MachTrajectory(const AmbientType &ambientType, const FluidType &fluidType, TimePoints &time, const TimeSeries &altitude, const TimeSeries &mach, const TimeSeries &alpha)
+            : m_timepoints(time), m_altitude(altitude), m_mach(mach), m_alpha(alpha), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
+        {
+        }
+
+        MachTrajectory(const AmbientType &ambientType, const FluidType &fluidType, const std::string &filename);
+
+        virtual double GetFreeStream() const override;
+        virtual TimeSeries GetPinf(TimePoints) const override;
+        virtual TimeSeries GetTinf(TimePoints) const override;
+        virtual TimeSeries GetRhoinf(TimePoints) const override;
+        virtual TimeSeries GetMinf(TimePoints) const override;
+        virtual TimeSeries GetVinf(TimePoints) const override;
+        virtual TimePoints GetTimePoints() const override;
+
+        virtual double GetPinf(double) const override;
+        virtual double GetTinf(double) const override;
+        virtual double GetRhoinf(double) const override;
+        virtual double GetMinf(double) const override;
+        virtual double GetVinf(double) const override;
+        virtual double GetLambdainf(double) const override;
+    };
+
 
     // NOTE: Disabled template system
 
@@ -95,7 +133,9 @@ namespace OTAP
         switch (T)
         {
         case TrajectoryType::Velocity:
-            return std::make_shared<VelocityTrajectory>(std::forward<Args>(args)...);
+            return safe_make_shared<VelocityTrajectory>(std::forward<Args>(args)...);
+        case TrajectoryType::Mach:
+            return safe_make_shared<MachTrajectory>(std::forward<Args>(args)...);
         default:
             assert(false);
             return nullptr;

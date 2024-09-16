@@ -8,7 +8,8 @@ namespace OTAP
 {
     // NOTE: May extend to multiple columns with different datatypes
     // TEST: Check edge cases and test this
-    template <typename T, size_t dim = 2>
+    // FIXME: Add support for rutime dynamic sizing
+    template <typename T = double, size_t dim = 2>
     class Table
     {
         // using Type = std::enable_if_t<std::is_arithmetic_v<T>, T>;
@@ -22,7 +23,7 @@ namespace OTAP
         std::map<Type, size_t> mRowNames;
 
     public:
-        // Table() = default;
+        explicit Table() = default;
         Table(const std::string &filepath, bool delim_whitespace = true)
         {
             Load(filepath, delim_whitespace);
@@ -94,6 +95,12 @@ namespace OTAP
                 }
                 return vals;
             }
+        }
+
+        Table<T, dim> &operator=(const std::initializer_list<columnType> &args)
+        {
+            mData = args;
+            return *this;
         }
 
         ~Table() = default;

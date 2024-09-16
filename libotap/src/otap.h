@@ -7,6 +7,7 @@
 #include "Problem.h"
 #include "MaterialLayer.h"
 #include "Table.h"
+#include "BC.h"
 
 #include <memory>
 #include <cassert>
@@ -27,6 +28,7 @@ namespace OTAP
         State &operator=(State &) = delete;
 
     public:
+        // static inline auto materialManager = MaterialManager("I:/Arnab/Projects/MISC/OTAP++/docs/material_databse.yaml");
         Geometry geometry;
         Trajectory trajectory;
 

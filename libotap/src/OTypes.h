@@ -55,7 +55,8 @@ namespace OTAP
         Eckert,
         Lees,
         FreeMolecular,
-        LeewardHeating
+        LeewardHeating,
+        KnBridged
     };
 
     enum class ResponseSolverType
@@ -97,16 +98,24 @@ namespace OTAP
     enum class TrajectoryType
     {
         Velocity,
-        // Mach,
-        // Flux,
-        // Wind_Tunnel,
+        Mach,
+        Wind_Tunnel,
         // CFD_Data,
-        // New_traj
     };
 
     enum class SourceType
     {
         RadFlux
+    };
+
+    enum class BCType
+    {
+        Radiation,
+        Convection,
+        NaturalConvection,
+        Flux,
+        HeatGeneration,
+        PropellantMass
     };
 
     // Helper functions

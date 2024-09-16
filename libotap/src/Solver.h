@@ -7,7 +7,9 @@
 #include "MaterialLayer.h"
 #include "Trajectory.h"
 #include "Table.h"
+#include "BC.h"
 #include <memory>
+#include "Eigen/Eigen"
 
 namespace OTAP
 {
@@ -28,11 +30,17 @@ namespace OTAP
         CoordinateType m_CoordinateType;
         FlowType m_FlowType;
         Fluid m_Fluid;
+        bool m_hasTrajectory = false;
+        Trajectory m_Trajectory = nullptr;
 
     public:
         HFSolverBase(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid)
             : m_CoordinateType(coordinateType), m_FlowType(flowType), m_Fluid(fluid) {}
+        HFSolverBase(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, Trajectory trajectory)
+            : m_CoordinateType(coordinateType), m_FlowType(flowType), m_Fluid(fluid), m_Trajectory(trajectory) { m_hasTrajectory = true; }
         virtual ~HFSolverBase() = default;
+        Trajectory GetTrajectory() const { return m_Trajectory; }
+        Fluid GetFluid() const { return m_Fluid; }
         virtual HFResult Solve(double time = 0.0) = 0;
         virtual HFResult Solve(double time, double Twall) = 0;
     };
@@ -47,8 +55,6 @@ namespace OTAP
         TimeSeries m_T0;
         GeometryPrimitive m_Geom;
 
-        Trajectory m_Trajectory;
-        bool m_hasTrajectory = false;
         double m_Tw;
 
         double m_currentTime = 0.0;
@@ -57,7 +63,7 @@ namespace OTAP
         FayRiddellSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, TimeSeries pinf, TimeSeries vinf, TimeSeries P0, TimeSeries T0, double Tw = 300)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Pinf(pinf), m_Vinf(vinf), m_P0(P0), m_T0(T0), m_Tw(Tw) {}
         FayRiddellSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, Trajectory traj, double Tw = 300)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Trajectory(traj), m_Tw(Tw)
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_Tw(Tw)
         {
             m_hasTrajectory = true;
         }
@@ -82,18 +88,16 @@ namespace OTAP
         TimeSeries m_T0;
         TimeSeries m_qstag;
         GeometryPrimitive m_Geom;
-        Trajectory m_Trajectory;
         double m_Tw;
         double m_RunningLength;
         double m_currentTime;
-        bool m_hasTrajectory = false;
 
     public:
         // FIXME: Calculate qstag from Fay & Riddelle
         LeesSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double RunningLength, TimeSeries pinf, TimeSeries Tinf, TimeSeries vinf, TimeSeries minf, TimeSeries P0, TimeSeries T0, TimeSeries qstag, double Tw = 300)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(RunningLength), m_Pinf(pinf), m_Tinf(Tinf), m_Vinf(vinf), m_Minf(minf), m_P0(P0), m_T0(T0), m_qstag(qstag), m_Tw(Tw) {}
         LeesSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double RunningLength, Trajectory traj, TimeSeries qstag, double Tw = 300)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(RunningLength), m_Trajectory(traj), m_qstag(qstag), m_Tw(Tw) { m_hasTrajectory = true; }
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_RunningLength(RunningLength), m_qstag(qstag), m_Tw(Tw) { m_hasTrajectory = true; }
         ~LeesSolver() = default;
         virtual HFResult Solve(double time = 0.0) override;
         virtual HFResult Solve(double time, double Twall) override
@@ -111,8 +115,6 @@ namespace OTAP
         TimeSeries m_Vinf;
         TimeSeries m_Tinf;
         GeometryPrimitive m_Geom;
-        Trajectory m_Trajectory;
-        bool m_hasTrajectory = false;
 
         double m_Tw;
         double m_currentTime;
@@ -121,7 +123,7 @@ namespace OTAP
         FreeMolecularSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, TimeSeries pinf, TimeSeries vinf, TimeSeries Tinf, double Tw = 300)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Pinf(pinf), m_Vinf(vinf), m_Tinf(Tinf), m_Tw(Tw) {}
         FreeMolecularSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, Trajectory traj, double Tw = 300)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Trajectory(traj), m_Tw(Tw) { m_hasTrajectory = true; }
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_Tw(Tw) { m_hasTrajectory = true; }
         ~FreeMolecularSolver() = default;
         virtual HFResult Solve(double time = 0.0) override;
         virtual HFResult Solve(double time, double Twall) override
@@ -144,14 +146,12 @@ namespace OTAP
         GeometryPrimitive m_Geom;
         double m_Tw;
         double m_currentTime;
-        Trajectory m_Trajectory;
-        bool m_hasTrajectory = false;
 
     public:
         BeckwithGallagherSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, TimeSeries pinf, TimeSeries Tinf, TimeSeries vinf, TimeSeries Minf, TimeSeries P0, TimeSeries T0, double Tw = 300)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Pinf(pinf), m_Tinf(Tinf), m_Vinf(vinf), m_Minf(Minf), m_P0(P0), m_T0(T0), m_Tw(Tw) {}
         BeckwithGallagherSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, Trajectory traj, double Tw = 300)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_Trajectory(traj), m_Tw(Tw) { m_hasTrajectory = true; }
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_Tw(Tw) { m_hasTrajectory = true; }
         ~BeckwithGallagherSolver() = default;
         virtual HFResult Solve(double time = 0.0) override;
         virtual HFResult Solve(double time, double Twall) override
@@ -179,16 +179,14 @@ namespace OTAP
         double m_Rec;
         double m_IsCone;
         double m_currentTime;
-        Trajectory m_Trajectory;
         CpData m_CpData;
-        bool m_hasTrajectory = false;
         double m_Loc;
 
     public:
         VanDriestSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double runningLength, TimeSeries pinf, TimeSeries vinf, TimeSeries P0, TimeSeries T0, TimeSeries Me, TimeSeries Te, TimeSeries Pe, double Tw = 300, double Rec = 0, double Is_Cone = 0)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(runningLength), m_Pinf(pinf), m_Vinf(vinf), m_P0(P0), m_T0(T0), m_Me(Me), m_Te(Te), m_Pe(Pe), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) {}
         VanDriestSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double runningLength, Trajectory traj, CpData cp, double loc, double Tw = 300, double Rec = 0, double Is_Cone = 0)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(runningLength), m_Trajectory(traj), m_CpData(cp), m_Loc(loc), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) { m_hasTrajectory = true; }
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_RunningLength(runningLength), m_CpData(cp), m_Loc(loc), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) { m_hasTrajectory = true; }
         ~VanDriestSolver() = default;
         virtual HFResult Solve(double time = 0.0) override;
         virtual HFResult Solve(double time, double Twall) override
@@ -215,17 +213,50 @@ namespace OTAP
         double m_Rec;
         double m_IsCone;
         double m_currentTime;
-        Trajectory m_Trajectory;
         CpData m_CpData;
-        bool m_hasTrajectory = false;
         double m_Loc;
 
     public:
         EckertSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double runningLength, TimeSeries pinf, TimeSeries vinf, TimeSeries P0, TimeSeries T0, TimeSeries Me, TimeSeries Te, TimeSeries Pe, double Tw = 300, double Rec = 0, double Is_Cone = 0)
             : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(runningLength), m_Pinf(pinf), m_Vinf(vinf), m_P0(P0), m_T0(T0), m_Me(Me), m_Te(Te), m_Pe(Pe), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) {}
         EckertSolver(const CoordinateType coordinateType, const FlowType flowType, Fluid fluid, GeometryPrimitive geom, double runningLength, Trajectory traj, CpData cp, double loc, double Tw = 300, double Rec = 0, double Is_Cone = 0)
-            : HFSolverBase(coordinateType, flowType, fluid), m_Geom(geom), m_RunningLength(runningLength), m_Trajectory(traj), m_CpData(cp), m_Loc(loc), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) { m_hasTrajectory = true; }
+            : HFSolverBase(coordinateType, flowType, fluid, traj), m_Geom(geom), m_RunningLength(runningLength), m_CpData(cp), m_Loc(loc), m_Tw(Tw), m_Rec(Rec), m_IsCone(Is_Cone) { m_hasTrajectory = true; }
         ~EckertSolver() = default;
+        virtual HFResult Solve(double time = 0.0) override;
+        virtual HFResult Solve(double time, double Twall) override
+        {
+            m_Tw = Twall;
+            m_currentTime = time;
+            return Solve();
+        }
+    };
+
+    class KnBridgedSolver : public HFSolverBase
+    {
+    private:
+        double m_Tw = 300;
+        double m_currentTime = 0;
+        GeometryPrimitive m_geom;
+        std::shared_ptr<HFSolverBase> m_continuumSolver;
+        double m_characteristicLength;
+        TimeSeries m_Pinffm;
+        TimeSeries m_Tinffm;
+        TimeSeries m_Vinffm;
+
+    public:
+        template <typename... Args>
+        KnBridgedSolver(double characteristic_length, TimeSeries Pinf_fm, TimeSeries Tinf_fm, TimeSeries Vinf_fm, HFSolverType continuumSolverType, CoordinateType coordinateType, FlowType flowType, Fluid fluid, GeometryPrimitive geom, Args &&...args)
+            : HFSolverBase(coordinateType, flowType, fluid), m_geom(geom), m_characteristicLength(characteristic_length), m_Pinffm(Pinf_fm), m_Tinffm(Tinf_fm), m_Vinffm(Vinf_fm)
+        {
+            m_continuumSolver = make_HFSolver(continuumSolverType, coordinateType, flowType, fluid, geom, std::forward<Args>(args)...);
+            if (m_continuumSolver->GetTrajectory() != nullptr)
+            {
+                m_hasTrajectory = true;
+                m_Trajectory = m_continuumSolver->GetTrajectory();
+            }
+        }
+
+        ~KnBridgedSolver() = default;
         virtual HFResult Solve(double time = 0.0) override;
         virtual HFResult Solve(double time, double Twall) override
         {
@@ -252,6 +283,8 @@ namespace OTAP
             return safe_make_shared<EckertSolver>(std::forward<Args>(args)...);
         case HFSolverType::FreeMolecular:
             return safe_make_shared<FreeMolecularSolver>(std::forward<Args>(args)...);
+        case HFSolverType::KnBridged:
+            return safe_make_shared<KnBridgedSolver>(std::forward<Args>(args)...);
         default:
             assert(false);
             return nullptr;
@@ -267,48 +300,49 @@ namespace OTAP
         // Initial Conditions
         double tInit = 0.0;
         double tFinal;
+        // Table timestep;
         Table<double> timestep;
         double innerRadius;
         double massRateChar = 0.0;
         double massRatePyro = 0.0;
-        Table<double> propellantMass;
-
-        // Frontwall radiation
-        Table<double> qRad;
-        double TRad = 300.0;
-        // Table qGen;
-
-        // Backwall radiation and convection
-        double hBackwall = 0.0; // FIXME: Give Options for h and characteristic length for natural convection
-        double TgBackwall = 300.0;
-        double TRadBackwall = 300.0;
+        double Sea_Level_Pressure = 101325;
+        double Ttol = 1.0;
+        double Air_Layer_Length = 1;
     };
 
     struct ResponseSolverOptions
     {
         CoordinateType coordinateType;
 
-        double Ttol = 1.0;
+        int Use_Correlation_or_value_backwall_convection = 1;
+        int Back_wall_Convection_ON = 0;
+        int Backwall_wall_Radiation_loss_ON = 0;
+        bool Sublime = false; // To correct it by material library
     };
 
+    // FIXME: Convert to Table
     struct ResponseResult
     {
-        TimeSeries T;
+        std::vector<double> solution_t;
+        std::vector<std::vector<double>> solution_T;
+        std::vector<size_t> interface_index;
+        std::string message;
     };
 
-    class ResponseSolverBase
+    class ResponseSolverBase // FIXME: Enforce heat flux solver to have trajectory
     {
     protected:
         std::shared_ptr<LayerStack> m_Layers;
+        BCArray m_BCs;
 
     public:
-        ResponseSolverBase(std::shared_ptr<LayerStack> layers, TimeSeries Tinit)
-            : m_Layers(layers)
+        ResponseSolverBase(std::shared_ptr<LayerStack> layers, TimeSeries Tinit, BCArray BCs)
+            : m_Layers(layers), m_BCs(BCs)
         {
             m_Layers->InitTemperature(Tinit);
         };
-        ResponseSolverBase(std::shared_ptr<LayerStack> layers, double Tinit)
-            : m_Layers(layers)
+        ResponseSolverBase(std::shared_ptr<LayerStack> layers, double Tinit, BCArray BCs)
+            : m_Layers(layers), m_BCs(BCs)
         {
             m_Layers->InitTemperature(Tinit);
         };
@@ -319,19 +353,46 @@ namespace OTAP
 
     class DefaultResponseSolver : public ResponseSolverBase
     {
-    public:
-        HFSolver m_ContinuumSolver;
-        HFSolver m_FreeMolecularSolver;
-        void CYSP2(double &A1, double &B1, double &C1, double k, double Inverse_ratio);
-        void CYSP1(double &A1, double &C1, double k, double Layer_thickness, double Inverse_ratio, double Outer_radius_instantaneous);
+        struct BCS
+        {
+            double flux_front = 0;
+            double flux_back = 0;
+            double propellant_mass_front = 0;
+            double propellant_mass_back = 0;
+            double qgen = 0;
+            TimeSeries Tambient_front;
+            TimeSeries Tambient_back;
+            TimeSeries h_front;
+            TimeSeries h_back;
+            TimeSeries Tg_front;
+            TimeSeries Tg_back;
+            TimeSeries l_front;
+            TimeSeries l_back;
+            TimeSeries l_tg_front;
+            TimeSeries l_tg_back;
+        };
 
-    public:
+    private:
+        FlowType m_FlowType;
+        Fluid m_Fluid;
+        HFSolver m_HFSolver;
+
         ResponseSolverParams m_params;
         ResponseSolverOptions m_options;
 
+        void CYSP2(double &A1, double &B1, double &C1, double k, double Inverse_ratio);
+        void CYSP1(double &A1, double &C1, double k, double Layer_thickness, double Inverse_ratio, double Outer_radius_instantaneous);
+        double FreeConvection_Surface(double T, double T_AMBIENT, double Characteristic_Length, double Sea_Level_Pressure);
+        void Instantaneous_MassRate_ThicknessSolver(double &Layer_thickness_1, double &Layer_thickness_2, double &Mass_rate_Char, double &Mass_rate_Pyrolysis, double Q_convective_front, double Qradiation_front, Eigen::VectorXd T, double deltat, const BCS &bcs);
+
+        void Air_Gap(double &h_convection, double &h_radiation, double AIR_GAP, double LENGTH, double Temp_1, double Temp_2, double Sea_Level_pressure, double Emmisivity_1, double Emmisivity_2);
+
+        void DefaultResponseMatrix(Eigen::VectorXd &T_current_step, Eigen::VectorXd Layer_thickness, Eigen::VectorXd Initial_Layer_thickness, double, double, BCS bcs, double &Mass_rate_Char, double &Mass_rate_Pyrolysis, Eigen::VectorXd k, double delt);
+
+    public:
         // template <typename T>
-        DefaultResponseSolver(std::shared_ptr<LayerStack> layers, HFSolver continuumSolver, HFSolver freeMolSolver, TimeSeries Tinit, ResponseSolverParams params, ResponseSolverOptions options)
-            : ResponseSolverBase(layers, Tinit), m_params(params), m_options(options) {}
+        DefaultResponseSolver(std::shared_ptr<LayerStack> layers, HFSolver hfsolver, TimeSeries Tinit, BCArray BCs, ResponseSolverParams params, ResponseSolverOptions options)
+            : ResponseSolverBase(layers, Tinit, BCs), m_params(params), m_options(options), m_HFSolver(hfsolver) { m_Fluid = m_HFSolver->GetFluid(); }
         virtual ~DefaultResponseSolver() = default;
         virtual ResponseResult Solve() override;
     };
@@ -341,7 +402,7 @@ namespace OTAP
     {
         switch (T)
         {
-        case ResponseSolverType::Default :
+        case ResponseSolverType::Default:
             return safe_make_shared<DefaultResponseSolver>(std::forward<Args>(args)...);
         default:
             assert(false);

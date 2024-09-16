@@ -6,3 +6,8 @@ Table:
 
 Optimization
 BLT (Cp)
+
+- hfsolver: remove fluid input
+- Tinit: accept scalar values
+- Stagnation point: default in geometry to be checked
+- 

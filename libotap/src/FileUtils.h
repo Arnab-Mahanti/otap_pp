@@ -6,7 +6,7 @@
 namespace OTAP
 {
     template <class CharContainer = std::string>
-    size_t file_get_contents(const char *filename, CharContainer *v)
+    static size_t file_get_contents(const char *filename, CharContainer *v)
     {
         std::FILE *fp = std::fopen(filename, "rb");
         RYML_CHECK_MSG(fp != nullptr, "could not open file");
@@ -25,7 +25,7 @@ namespace OTAP
 
     /** load a file from disk and return a newly created CharContainer */
     template <class CharContainer = std::string>
-    CharContainer file_get_contents(const char *filename)
+    static CharContainer file_get_contents(const char *filename)
     {
         CharContainer cc;
         file_get_contents(filename, &cc);
@@ -40,7 +40,7 @@ namespace OTAP
     }
 
     /** save a buffer into a file */
-    void file_put_contents(const char *filename, const char *buf, size_t sz, const char *access)
+    static void file_put_contents(const char *filename, const char *buf, size_t sz, const char *access)
     {
         std::FILE *fp = std::fopen(filename, access);
         RYML_CHECK_MSG(fp != nullptr, "could not open file");

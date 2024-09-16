@@ -3,6 +3,8 @@
 #include "Eigen/Cholesky"
 #include "Eigen/LU"
 #include <cmath>
+#include <algorithm>
+#include <numeric>
 
 OTAP::HFResult OTAP::FayRiddellSolver::Solve(double time)
 {
@@ -1074,7 +1076,55 @@ OTAP::HFResult OTAP::FreeMolecularSolver::Solve(double time)
     return Result;
 }
 
-// FOR CYLINDRICAL/SPHERICAL COORDINATE TRANSFORMATION (RADIUS != 0)
+OTAP::HFResult OTAP::KnBridgedSolver::Solve(double time)
+{
+    TimeSeries Pinf;
+    TimeSeries Vinf;
+    TimeSeries Tinf;
+    TimeSeries Kninf;
+
+    if (m_hasTrajectory)
+    {
+        if (time != 0.0)
+        {
+            m_currentTime = time;
+        }
+        Pinf.push_back(m_Trajectory->GetPinf(m_currentTime));
+        Tinf.push_back(m_Trajectory->GetTinf(m_currentTime));
+        Vinf.push_back(m_Trajectory->GetVinf(m_currentTime));
+        Kninf.push_back(m_Trajectory->GetLambdainf(m_currentTime) / m_characteristicLength);
+        m_Pinffm = Pinf;
+        m_Tinffm = Tinf;
+        m_Vinffm = Vinf;
+    }
+    else
+    {
+        auto lambda = m_Fluid->Lambda(m_Pinffm, m_Tinffm);
+        std::transform(lambda.begin(), lambda.end(), std::back_inserter(Kninf), [this](double l)
+                       { return l / m_characteristicLength; });
+    }
+
+    auto conres = m_continuumSolver->Solve(m_currentTime, m_Tw);
+    FreeMolecularSolver fm(m_CoordinateType, m_FlowType, m_Fluid, m_geom, m_Pinffm, m_Vinffm, m_Tinffm, m_Tw);
+    auto fmres = fm.Solve(m_currentTime, m_Tw);
+
+    HFResult res;
+    TimeSeries factor;
+    std::transform(Kninf.begin(), Kninf.end(), std::back_inserter(factor), [](double kn)
+                   { return (1 - std::exp(-kn)); });
+
+    for (size_t i = 0; i < factor.size(); i++)
+    {
+        auto f = (1 - factor[i]) * conres.q[i] + factor[i] * fmres.q[i];
+        res.q.push_back(f);
+        res.Tg.push_back(conres.Tg[i]);
+        res.h.push_back(f / (conres.Tg[i] - m_Tw));
+    }
+
+    return res;
+}
+
+/// FOR CYLINDRICAL/SPHERICAL COORDINATE TRANSFORMATION (RADIUS != 0)
 void OTAP::DefaultResponseSolver::CYSP2(double &A1, double &B1, double &C1, double k, double Inverse_ratio)
 {
     double Coordinate_ratio, COORDINATE_COEF;
@@ -1127,57 +1177,329 @@ void OTAP::DefaultResponseSolver::CYSP1(double &A1, double &C1, double k, double
     C1 = C1 + Coordinate_ratio;
 }
 
-OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
+double OTAP::DefaultResponseSolver::FreeConvection_Surface(double T, double T_AMBIENT, double Characteristic_Length, double Sea_Level_Pressure)
+{
+    double Tbar, Acceleration_due_to_Gravity;
+    Tbar = 0.5 * (T + T_AMBIENT);
+    Acceleration_due_to_Gravity = 9.80665;
+    auto Density_flow = m_Fluid->Rho(Sea_Level_Pressure, Tbar);
+    auto Viscosity_flow = m_Fluid->mu(Sea_Level_Pressure, Tbar);
+    auto Conductivity_flow = m_Fluid->k(Sea_Level_Pressure, Tbar);
+    auto Pr_flow = m_Fluid->Pr(Sea_Level_Pressure, Tbar);
+
+    double delta_Temp;
+    delta_Temp = Tbar - T_AMBIENT;
+    double Gr_No, Gr_No_Pr, Nu;
+    Gr_No = (Acceleration_due_to_Gravity * delta_Temp * pow(Characteristic_Length, 3) * std::pow(Density_flow, 2)) / (Tbar * std::pow(Viscosity_flow, 2));
+    Gr_No_Pr = Gr_No * Pr_flow;
+
+    if (Gr_No_Pr > 1000000000)
+    {
+        Nu = 0.13 * std::pow(Gr_No_Pr, 0.333);
+    }
+    else
+    {
+        Nu = 0.59 * std::pow(Gr_No_Pr, 0.25);
+    }
+
+    return Nu * (Conductivity_flow / Characteristic_Length);
+}
+
+// Get h_convection & h_radiation incase of air gap
+void OTAP::DefaultResponseSolver::Air_Gap(double &h_convection, double &h_radiation, double AIR_GAP, double LENGTH, double Temp_1, double Temp_2, double Sea_Level_pressure, double Emmisivity_1, double Emmisivity_2)
+{
+    double Sigma;
+    Sigma = 5.67 * pow(10, -8);
+    int FACTOR;
+    double Tbar, beta, Diffusivity, Dynamic_Viscosity, Acceleration_due_to_gravity;
+    h_convection = 5;
+    h_radiation = 5;
+    auto air_fluid = make_fluid(FluidType::Hansen_Air);
+
+    if (Temp_1 == Temp_2)
+    {
+        h_convection = 0;
+        h_radiation = 0;
+    }
+    else
+    {
+        if (Temp_1 > Temp_2)
+        {
+            FACTOR = 1;
+        }
+        else
+        {
+            FACTOR = -1;
+        }
+        Tbar = 0.5 * (Temp_1 + Temp_2);
+        beta = 1 / Tbar;
+
+        auto Viscosity_air_gap = air_fluid->mu(Sea_Level_pressure, Tbar);
+        auto Conductivity_air_gap = air_fluid->k(Sea_Level_pressure, Tbar);
+        auto Cp_air_gap = air_fluid->Cp(Sea_Level_pressure, Tbar);
+        auto Density_air_gap = air_fluid->Rho(Sea_Level_pressure, Tbar);
+        auto Pr_air_gap = air_fluid->Pr(Sea_Level_pressure, Tbar);
+
+        Diffusivity = Conductivity_air_gap / (Density_air_gap * Cp_air_gap);
+        Dynamic_Viscosity = Viscosity_air_gap / Density_air_gap;
+        if (m_options.coordinateType == CoordinateType::Cartesian)
+        {
+            // Parallel plate
+            double AIR_GAP_HALF;
+            AIR_GAP_HALF = AIR_GAP / 2;
+
+            double Gr_No, Gr_No_s, CL, CL_BAR, A74, C3, C3RA, Nu_1, S, A1, A2, A3, A4, i, DS, AI, Nu_R, h_convection1;
+            Gr_No = ((Acceleration_due_to_gravity * beta * (Temp_1 - Temp_2) * (pow(AIR_GAP, 3))) / (Dynamic_Viscosity * Diffusivity)) * FACTOR;
+
+            Gr_No_s = Gr_No * (AIR_GAP / LENGTH);
+            CL = 0.48 * pow((Pr_air_gap / (Pr_air_gap + 0.861)), 0.25);
+            CL_BAR = 1.3333 * CL;
+            A74 = 0.919062526849;
+            C3 = pow(12 * A74 * CL_BAR, 1.3333);
+            C3RA = C3 / Gr_No_s;
+            Nu_1 = CL_BAR * pow(Gr_No_s, 0.25);
+
+            S = 0;
+            A1 = -1;
+            i = 1;
+            A4 = 0;
+
+            if (C3RA <= 20)
+            {
+                while (abs(DS) > 0.0001)
+                {
+                    AI = i;
+                    A1 = A1 * (-1);
+                    A2 = pow(C3RA, (AI - 1));
+                    A3 = 3 / (4 * AI - 1);
+                    A4 = A4 * (AI - 1);
+                    if (A4 == 0)
+                    {
+                        A4 = 1;
+                    }
+                    DS = (A1 * A2 * A3) / A4;
+                    S = S + DS;
+                    i = i + 1;
+                }
+                Nu_R = Nu_1 * S;
+                h_convection1 = (Nu_R * Conductivity_air_gap) / AIR_GAP;
+            }
+        }
+        else if (m_options.coordinateType == CoordinateType::Axisym)
+        {
+            // Coaxial Cylinders
+
+            double Diameter_Outer, Diameter_Inner, Thickness, Gr_No, Gr_No_s, A1, A2, EKEF, Nu_R, h_convection1;
+            Diameter_Outer = LENGTH;
+            Diameter_Inner = AIR_GAP;
+            Thickness = 0.5 * (Diameter_Outer - Diameter_Inner);
+            Gr_No = ((Acceleration_due_to_gravity * beta * (Temp_1 - Temp_2) * (pow(Thickness, 3))) / (Dynamic_Viscosity * Diffusivity)) * FACTOR;
+            A1 = log(Diameter_Outer / Diameter_Inner);
+            A2 = pow(Thickness, 3) * pow(((1 / pow(Diameter_Outer, 0.6)) + (1 / pow(Diameter_Inner, 0.6))), 5);
+            Gr_No_s = (Gr_No * pow(A1, 4)) / A2;
+            EKEF = 0.386 * pow((Pr_air_gap / (Pr_air_gap + 0.861)), 0.25) * pow(Gr_No_s, 0.25);
+            if (EKEF = 1)
+            {
+                EKEF = 1;
+            }
+
+            h_convection1 = (2 * Conductivity_air_gap * EKEF) / (A1 * Diameter_Inner);
+            Nu_R = (h_convection1 * Thickness) / Conductivity_air_gap;
+        }
+    }
+
+    h_convection = h_convection * FACTOR;
+
+    double ELH, F, AR1, AR2, AR3, FAC, QRAD;
+    ELH = LENGTH / AIR_GAP;
+    F = sqrt(1 + 1 / (ELH * ELH)) - 1 / ELH;
+    if (m_options.coordinateType == CoordinateType::Axisym)
+    {
+        F = 1 / ELH;
+    }
+    AR1 = (1 - Emmisivity_1) / Emmisivity_1;
+    AR2 = (1 - Emmisivity_2) / Emmisivity_2;
+    AR3 = 1 / F;
+    FAC = 1 / (AR1 + AR2 + AR3);
+    QRAD = FAC * Sigma * (pow(Temp_1, 4) - pow(Temp_2, 4));
+    h_radiation = QRAD / (Temp_1 - Temp_2);
+}
+
+void OTAP::DefaultResponseSolver::Instantaneous_MassRate_ThicknessSolver(double &Layer_thickness_1, double &Layer_thickness_2, double &Mass_rate_Char, double &Mass_rate_Pyrolysis, double Q_convective_front, double Qradiation_front, Eigen::VectorXd T, double deltat, const BCS &bcs)
 
 {
     using namespace Eigen;
-    double heat_transfer_coefficient_outer, Tg, delt, Qradiation;
-    heat_transfer_coefficient_outer = 0;
-    Tg = 0;
-    delt = 0;
-    Qradiation = 0;
-    
+    double sigma, MPD, MCD;
+    sigma = 5.67 * std::pow(10, -8);
+    auto Layers = *m_Layers;
+    VectorXd Inverse_nodes;
+
+    for (size_t i = 0; i < Layers.GetCount(); i++)
+    {
+        Inverse_nodes(i) = 1. / Layers[i].numNodes;
+    }
+
     auto nodes = m_Layers->Nodes;
     auto numnodes = m_Layers->NumNodes;
 
-    // (*m_Layers)[0].thickness
+    MPD = Mass_rate_Pyrolysis;
+    MCD = Mass_rate_Char;
+    if (T(0) < nodes[0].Tabl() - m_params.Ttol || Layer_thickness_1 == 0 || m_options.Sublime == 1)
+    {
+        MCD = 0;
+    }
+    else
+    {
+        double TT, Choice_1;
+        TT = (4 * T(1) - 3 * nodes[0].Tabl() - T(2)) / (2 * Inverse_nodes(0));
+        // if (Layer_thickness(0) < X1_Thin)
+        // {
+        // 	TT = T(1) - Temp_Ablation;
+        // }
+        Qradiation_front = -std::transform_reduce(bcs.Tambient_front.begin(),
+                                                  bcs.Tambient_front.end(),
+                                                  0.0,
+                                                  std::plus<double>(),
+                                                  [&](double t)
+                                                  {
+                                                      return nodes[0].emissivity(T(0)) * sigma * (std::pow(nodes[0].Tabl(), 4) - std::pow(t, 4));
+                                                  });
+        Choice_1 = Q_convective_front + Qradiation_front + (nodes[0].k(T(0)) * TT) / Layer_thickness_1;
+        MCD = std::max(Choice_1, 10.0);
+        MCD = MCD / nodes[0].Habl();
+    }
+
+    if (((T(numnodes[1] - 1) < nodes[numnodes[1] - 1].Tpyro() - m_params.Ttol) && MPD == 0) || Layer_thickness_1 == 0)
+    {
+        MPD = 0;
+    }
+
+    else
+    {
+        if (Layer_thickness_1 == 0)
+        {
+            double TT, Choice_1;
+            Qradiation_front = -std::transform_reduce(bcs.Tambient_front.begin(),
+                                                      bcs.Tambient_front.end(),
+                                                      0.0,
+                                                      std::plus<double>(),
+                                                      [&](double t)
+                                                      {
+                                                          return nodes[numnodes[1]].emissivity(T(numnodes[1] - 1)) * sigma * (std::pow(nodes[numnodes[1] - 1].Tpyro(), 4) - std::pow(t, 4));
+                                                      });
+            MPD = Q_convective_front + Qradiation_front;
+            TT = (-4 * T(numnodes[1]) + 3 * nodes[numnodes[1] - 1].Tpyro() + T(numnodes[1] + 1)) / (2 * Inverse_nodes(1));
+            Choice_1 = nodes[numnodes[1]].k(T[numnodes[1] - 1]) * TT;
+            MPD = MPD - std::min(MPD, Choice_1 / Layer_thickness_1);
+            MPD = MPD / nodes[numnodes[1] - 1].Hpyro();
+        }
+
+        else
+        {
+
+            double TT, Choice_1;
+            TT = (4 * T(numnodes[1] - 2) - 3 * nodes[numnodes[1] - 1].Tpyro() - T(numnodes[1] - 3)) / (2 * Inverse_nodes(0));
+            MPD = (nodes[numnodes[1] - 1].k(T[numnodes[1] - 1]) * TT) / Layer_thickness_1;
+            TT = (-4 * T(numnodes[1]) + 3 * nodes[numnodes[1] - 1].Tpyro() + T(numnodes[1] + 1)) / (2 * Inverse_nodes(1));
+            Choice_1 = nodes[numnodes[1]].k(T[numnodes[1] - 1]) * TT;
+            MPD = MPD - std::min(MPD, Choice_1 / Layer_thickness_2);
+            MPD = MPD / nodes[numnodes[1] - 1].Hpyro();
+        }
+
+        if (m_options.Sublime)
+        {
+            double VAL;
+            Layer_thickness_1 = 0;
+            VAL = ((Mass_rate_Pyrolysis + MPD) * deltat) / (2 * (nodes[0].rhovirgin() - nodes[0].rhochar()));
+            Layer_thickness_1 = Layer_thickness_1 - VAL;
+        }
+        else
+        {
+            double VAL, VAL1;
+            VAL = ((Mass_rate_Pyrolysis + MPD) * deltat) / (2 * (nodes[0].rhovirgin() - nodes[0].rhochar()));
+            Layer_thickness_1 = Layer_thickness_1 - VAL;
+            VAL1 = ((Mass_rate_Char + MCD) * deltat) / (2 * (nodes[0].rhopyrogas()));
+            Layer_thickness_1 = Layer_thickness_1 + VAL - VAL1;
+        }
+    }
+
+    Mass_rate_Pyrolysis = MPD;
+    Mass_rate_Char = MCD;
+}
+
+void OTAP::DefaultResponseSolver::DefaultResponseMatrix(Eigen::VectorXd &T, Eigen::VectorXd Layer_thickness, Eigen::VectorXd Initial_Layer_thickness, double heat_transfer_coefficient_outer, double Tg, BCS bcs, double &Mass_rate_Char, double &Mass_rate_Pyrolysis, Eigen::VectorXd k, double delt)
+{
+    using namespace Eigen;
+
+    // TODO: propellant_front, l_front, l_tg_front [[unused]]
+    auto &[Flux_front,
+           Flux_back,
+           propmass_front,
+           Propellant_Mass,
+           qgen,
+           Tamb_front,
+           Tamb_back,
+           h_front,
+           h_back,
+           Tg_front,
+           Tg_back,
+           l_front,
+           l_back,
+           l_tg_front,
+           l_tg_back] = bcs;
+
+    auto nodes = m_Layers->Nodes;
+    auto numnodes = m_Layers->NumNodes;
+    auto Layers = *m_Layers;
+    // Layers[0].thickness
 
     double Total_thickness;
     Total_thickness = 0;
-    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
+    for (size_t i = 0; i < Layers.GetCount(); i++)
     {
-        Total_thickness = Total_thickness + (*m_Layers)[i].thickness;
+        Total_thickness = Total_thickness + Layers[i].thickness;
     }
 
     MatrixXd A, B;
-    VectorXd T, SS;
-    A = MatrixXd::Zero(numnodes[numnodes.size()], numnodes[numnodes.size()]);
-    B = MatrixXd::Zero(numnodes[numnodes.size()], 1);
-    T = VectorXd::Constant(numnodes[numnodes.size()], 0);
-    SS = VectorXd::Constant(numnodes[numnodes.size()], 0);
+    VectorXd SS;
+    A = MatrixXd::Zero(numnodes[Layers.GetCount()], numnodes[Layers.GetCount()]);
+    B = MatrixXd::Zero(numnodes[Layers.GetCount()], 1);
+    // T = VectorXd::Constant(numnodes[Layers.GetCount()]-1, 0);
+    SS = VectorXd::Constant(numnodes[Layers.GetCount()], qgen);
 
-    for (size_t i = 0; i < numnodes[numnodes.size() - 1]; i++)
+
+    VectorXd Inverse_nodes(Layers.GetCount());
+
+    for (size_t i = 0; i < Layers.GetCount(); i++)
     {
-        T(i) = nodes[i].T;
-    }
-
-    VectorXd Inverse_nodes;
-
-    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
-    {
-        Inverse_nodes(i) = 1 / (*m_Layers)[i].numNodes;
+        Inverse_nodes(i) = 1. / Layers[i].numNodes;
     }
 
     double MPD, MCD, CPG, Outer_radius_instantaneous, Outer_Radius, Layer_thickness_0, Layer_thickness_1, Initial_Layer_thickness_1, Initial_Layer_thickness_0;
 
     Outer_Radius = m_params.innerRadius + Total_thickness;
-    VectorXd Layer_thickness, Initial_Layer_thickness;
+    // VectorXd Layer_thickness, Initial_Layer_thickness;
 
-    for (size_t i = 0; i < (*m_Layers).GetCount(); i++)
+    // for (size_t i = 0; i < Layers.GetCount(); i++)
+    // {
+
+    //     Layer_thickness(i) = Layers[i].thickness;
+    //     Initial_Layer_thickness(i) = Layers[i].thickness;
+    // }
+
+    if (Layers.GetCount() < 2)
     {
-
-        Layer_thickness(i) = (*m_Layers)[i].thickness;
-        Initial_Layer_thickness(i) = (*m_Layers)[i].thickness;
+        Layer_thickness_0 = Layer_thickness(0);
+        Layer_thickness_1 = 0;
+        Initial_Layer_thickness_0 = Layers[0].thickness;
+        Initial_Layer_thickness_1 = 0;
+    }
+    else
+    {
+        Layer_thickness_0 = Layer_thickness(0);
+        Layer_thickness_1 = Layer_thickness(1);
+        Initial_Layer_thickness_0 = Layers[0].thickness;
+        Initial_Layer_thickness_1 = Layers[1].thickness;
     }
 
     if (m_options.coordinateType != CoordinateType::Cartesian)
@@ -1186,13 +1508,12 @@ OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
     }
 
     double AA1_s, AA2_s, BB1_s, BB2_s, CC1_s, CC2_s, DD1_s, DD2_s;
-    double sigma;
-    sigma = 5.67 * pow(10, -8);
-    MPD = m_params.massRatePyro;
-    MCD = m_params.massRateChar;
-    CPG = nodes[0].Cppyrogas(nodes[0].T);
+    const auto sigma = 5.67 * std::pow(10, -8);
+    MPD = Mass_rate_Pyrolysis;
+    MCD = Mass_rate_Char;
+    CPG = nodes[0].Cppyrogas(T(0));
 
-    if (Layer_thickness_0 != 0)
+    if (Layer_thickness(0) != 0)
     {
         if (MCD != 0)
         {
@@ -1203,34 +1524,1047 @@ OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
 
         else if (MCD == 0)
         {
-            AA2_s = nodes[0].k() / std::pow(Inverse_nodes(0), 2) - (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0));
-            BB2_s = -((3 * nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2)))) - (((nodes[0].rho() * nodes[0].Cp()) / delt) * Layer_thickness(0) * Layer_thickness(0));
-            CC2_s = ((nodes[0].k() + nodes[1].k()) / (2 * (pow(Inverse_nodes(0), 2))) + (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0)));
-            DD2_s = -(((nodes[0].rho() * nodes[0].Cp()) / delt) * T(0) * Layer_thickness(0) * Layer_thickness(0)) - SS(0) * Layer_thickness(0) * Layer_thickness(0);
+            AA2_s = k(0) / std::pow(Inverse_nodes(0), 2) - (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0));
+            BB2_s = -((3 * k(0) + k(1)) / (2 * (pow(Inverse_nodes(0), 2)))) - (((nodes[0].rho(T(0)) * nodes[0].Cp(T(0))) / delt) * Layer_thickness(0) * Layer_thickness(0));
+            CC2_s = ((k(0) + k(1)) / (2 * (pow(Inverse_nodes(0), 2))) + (MPD * CPG * Layer_thickness(0)) / (2 * Inverse_nodes(0)));
+            DD2_s = -(((nodes[0].rho(T(0)) * nodes[0].Cp(T(0))) / delt) * T(0) * Layer_thickness(0) * Layer_thickness(0)) - SS(0) * Layer_thickness(0) * Layer_thickness(0);
 
             if (m_options.coordinateType != CoordinateType::Cartesian)
             {
 
                 if (Outer_radius_instantaneous <= 0.0000001)
                 {
-                    CYSP2(AA2_s, BB2_s, CC2_s, nodes[0].k(), Inverse_nodes(0));
+                    CYSP2(AA2_s, BB2_s, CC2_s, k(0), Inverse_nodes(0));
                 }
                 else if (Outer_radius_instantaneous > 0.0000001)
                 {
-                    CYSP1(AA2_s, CC2_s, nodes[0].k(), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                    CYSP1(AA2_s, CC2_s, k(0), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
                 }
             }
 
-            AA1_s = nodes[0].k() / (2 * Inverse_nodes(0));
-            BB1_s = heat_transfer_coefficient_outer * Layer_thickness(0);
-            CC1_s = -nodes[0].k() / (2 * Inverse_nodes(0));
-            DD1_s = (heat_transfer_coefficient_outer * Tg - nodes[0].emissivity() * sigma * (pow(T(0), 4) - pow(m_params.TRad, 4)) + Qradiation) * Layer_thickness(0);
+            AA1_s = k(0) / (2 * Inverse_nodes(0));
+            BB1_s = std::reduce(h_front.begin(), h_front.end(), heat_transfer_coefficient_outer) * Layer_thickness(0);
+            CC1_s = -k(0) / (2 * Inverse_nodes(0));
+            DD1_s = (std::inner_product(h_front.begin(), h_front.end(), Tg_front.begin(), heat_transfer_coefficient_outer * Tg) - nodes[0].emissivity(T(0)) * sigma * std::transform_reduce(Tamb_front.begin(), Tamb_front.end(), 0., std::plus<double>(), [&T](double t)
+                                                                                                                                                                                            { return std::pow(T(0), 4) - std::pow(t, 4); }) +
+                     Flux_front) *
+                    Layer_thickness(0);
 
             A(0, 0) = BB1_s * AA2_s - AA1_s * BB2_s;
             A(0, 1) = AA2_s * CC1_s - AA1_s * CC2_s;
             B(0, 0) = AA2_s * DD1_s - AA1_s * DD2_s;
         }
+
+        //		//X1THIN OPTION TO ADD
+
+        double Factor1, Factor2;
+        for (int i = 1; i < numnodes[1] - 1; i++)
+        {
+
+            A(i, i - 1) = (k(i - 1) + k(i)) / (2 * (std::pow(Inverse_nodes(0), 2)));
+            A(i, i) = -((k(i - 1) + 2 * k(i) + k(i + 1)) / (2 * (std::pow(Inverse_nodes(0), 2)))) - ((nodes[i].rho(T(i)) * nodes[i].Cp(T(i))) / delt) * Layer_thickness(0) * Layer_thickness(0);
+            A(i, i + 1) = (k(i) + k(i + 1)) / (2 * (std::pow(Inverse_nodes(0), 2)));
+            Factor1 = (Layer_thickness(0) / Inverse_nodes(0)) * (MPD * CPG + (MCD * nodes[i].rho(T(i)) * nodes[i].Cp(T(i))) / nodes[i].rhopyrogas() + ((i) / (numnodes[1] - 1)) * ((MPD * nodes[i].rho(T(i)) * nodes[i].Cp(T(i))) / (nodes[i].rhovirgin() - nodes[i].rhochar()) - (MCD * nodes[i].rho(T(i)) * nodes[i].Cp(T(i))) / nodes[i].rhopyrogas()));
+            Factor2 = Factor1 / 2;
+
+            if (A(i, i - 1) < Factor2)
+            {
+                A(i, i) = A(i, i) - Factor1;
+                A(i, i + 1) = A(i, i + 1) + Factor1;
+            }
+            else
+            {
+                A(i, i - 1) = A(i, i - 1) - Factor2;
+                A(i, i + 1) = A(i, i + 1) + Factor2;
+            }
+
+            B(i, 0) = -(((nodes[i].rho(T(i)) * nodes[i].Cp(T(i))) / delt) * T(i) * Layer_thickness(0) * Layer_thickness(0)) - SS(i) * Layer_thickness(0) * Layer_thickness(0);
+
+            if (m_options.coordinateType != CoordinateType::Cartesian)
+            {
+                Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(0) * Inverse_nodes(0);
+                if (Outer_radius_instantaneous <= 0.0000001)
+                {
+                    CYSP2(A(i, i - 1), A(i, i), A(i, i + 1), k(i), Inverse_nodes(0));
+                }
+                else if (Outer_radius_instantaneous > 0.0000001)
+                {
+                    CYSP1(A(i, i - 1), A(i, i + 1), k(i), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                }
+            }
+        }
+
+        if (m_options.coordinateType != CoordinateType::Cartesian)
+        {
+            Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(0) * Inverse_nodes(0);
+        }
+
+        if (Layers.GetCount() >= 2)
+        {
+            if (MPD != 0)
+            {
+                A(numnodes[1] - 1, numnodes[1] - 2) = 0;
+                A(numnodes[1] - 1, numnodes[1] - 1) = 1;
+                A(numnodes[1] - 1, numnodes[1]) = 0;
+                B(numnodes[1] - 1, 0) = nodes[numnodes[1] - 1].Tpyro();
+            }
+
+            else if (MPD == 0 && Layer_thickness(1) != 0)
+            {
+
+                double AA1_i, BB1_i, CC1_i, DD1_i, AA3_i, BB3_i, CC3_i, DD3_i, AA2_i, AA2D_i, CC2_i, CC2D_i, BB2, DD2;
+                AA1_i = (k(numnodes[1] - 1) + k(numnodes[1] - 2)) / (2 * std::pow(Inverse_nodes(0), 2));
+                BB1_i = -(k(numnodes[1] - 2) + 3 * k(numnodes[1] - 1)) / (2 * std::pow(Inverse_nodes(0), 2)) - (nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1)) / delt) * Layer_thickness(0) * Layer_thickness(0);
+                CC1_i = k(numnodes[1] - 1) / (1 * std::pow(Inverse_nodes(0), 2));
+                DD1_i = -((nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1))) / delt) * (T(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0)) - SS(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA1_i, BB1_i, CC1_i, k(numnodes[1] - 1), Inverse_nodes(0));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA1_i, CC1_i, k(numnodes[1] - 1), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA3_i = k(numnodes[1]) / (1 * std::pow(Inverse_nodes(1), 2));
+                BB3_i = -(k(numnodes[1] + 1) + 3 * k(numnodes[1])) / (2 * std::pow(Inverse_nodes(1), 2)) - (nodes[numnodes[1]].rho(T(numnodes[1] - 1)) * nodes[numnodes[1]].Cp(T(numnodes[1] - 1)) / delt) * Layer_thickness(1) * Layer_thickness(1);
+                CC3_i = (k(numnodes[1]) + k(numnodes[1] + 1)) / (2 * std::pow(Inverse_nodes(1), 2));
+                DD3_i = -((nodes[numnodes[1]].rho(T(numnodes[1] - 1)) * nodes[numnodes[1]].Cp(T(numnodes[1] - 1)) / delt) * T(numnodes[1] - 1) * Layer_thickness(1) * Layer_thickness(1)) - SS(numnodes[1] - 1) * Layer_thickness(1) * Layer_thickness(1);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA3_i, BB3_i, CC3_i, k(numnodes[1]), Inverse_nodes(1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA3_i, CC3_i, k(numnodes[1]), Layer_thickness(1), Inverse_nodes(1), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA2_i = -k(numnodes[1] - 1) / (2 * Inverse_nodes(0) * Layer_thickness(0));
+                AA2D_i = k(numnodes[1]) / (2 * Inverse_nodes(1) * Layer_thickness(1));
+                CC2_i = -AA2D_i;
+                CC2D_i = -AA2_i;
+                BB2 = 0;
+                DD2 = MPD * nodes[numnodes[1] - 1].Hpyro();
+
+                A(numnodes[1] - 1, numnodes[1] - 2) = AA1_i * CC2D_i * AA3_i - CC1_i * AA2_i * AA3_i;
+                A(numnodes[1] - 1, numnodes[1] - 1) = BB3_i * CC1_i * AA2D_i + BB1_i * CC2D_i * AA3_i - BB2 * CC1_i * AA3_i;
+                A(numnodes[1] - 1, numnodes[1]) = CC1_i * AA2D_i * CC3_i - AA3_i * CC1_i * CC2_i;
+                B(numnodes[1] - 1, 0) = DD3_i * CC1_i * AA2D_i + AA3_i * CC2D_i * DD1_i - DD2 * CC1_i * AA3_i;
+            }
+
+            if ((Layers.GetCount() == 1) || (MPD == 0 && Layer_thickness(1) == 0 && Layers.GetCount() < 3))
+            {
+                double AA2_b, BB2_b, CC2_b, DD2_b, AA1_b, BB1_b, CC1_b, DD1_b;
+
+                AA2_b = (k(numnodes[1] - 1) + k(numnodes[1] - 2)) / (2 * std::pow(Inverse_nodes(0), 2));
+                BB2_b = -(k(numnodes[1] - 2) + 3 * k(numnodes[1] - 1)) / (2 * pow(Inverse_nodes(0), 2)) - (nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1)) / delt) * Layer_thickness(0) * Layer_thickness(0);
+                CC2_b = k(numnodes[1] - 1) / (1 * std::pow(Inverse_nodes(0), 2));
+                DD2_b = -((nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1))) / delt) * T(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0) - SS(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA2_b, BB2_b, CC2_b, k(numnodes[1] - 1), Inverse_nodes(0));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA2_b, CC2_b, k(numnodes[1] - 1), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                    }
+                }
+
+                for (size_t i = 0; i < l_back.size(); i++)
+                {
+                    h_back.push_back(FreeConvection_Surface(T(numnodes[1] - 1), l_tg_back[i], l_back[i], m_params.Sea_Level_Pressure));
+                    Tg_back.push_back(l_tg_back[i]);
+                }
+
+                std::vector<double> h_radiation_loss_backwall;
+                for (size_t i = 0; i < Tamb_back.size(); i++)
+                {
+                    h_radiation_loss_backwall.push_back(sigma * nodes[numnodes[1] - 1].emissivity(numnodes[1] - 1) * (std::pow(T(numnodes[1] - 1), 3) + std::pow(T(numnodes[1] - 1), 2) * Tamb_back[i] + T(numnodes[1] - 1) * std::pow(Tamb_back[i], 2) + std::pow(Tamb_back[i], 3)));
+                }
+
+                AA1_b = k(numnodes[1] - 1) / (2 * Layer_thickness(0) * Inverse_nodes(0));
+                BB1_b = std::reduce(h_back.begin(), h_back.end(), 0.) + std::reduce(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), 0.) + Propellant_Mass / delt;
+                CC1_b = -k(numnodes[1] - 1) / (2 * Layer_thickness(0) * Inverse_nodes(0));
+                DD1_b = Flux_back + std::inner_product(h_back.begin(), h_back.end(), Tg_back.begin(), 0.) + std::inner_product(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), Tamb_back.begin(), 0.) +
+                        (Propellant_Mass * T(numnodes[1] - 1) / delt);
+
+                A(numnodes[1] - 1, numnodes[1] - 2) = CC1_b * AA2_b - CC2_b * AA1_b;
+                A(numnodes[1] - 1, numnodes[1] - 1) = CC1_b * BB2_b - CC2_b * BB1_b;
+                B(numnodes[1] - 1, 0) = CC1_b * DD2_b - CC2_b * DD1_b;
+            }
+        }
+
+        if (MPD == 0 && Layer_thickness(1) == 0 && Layers.GetCount() >= 3)
+        {
+            double AA1_i, BB1_i, CC1_i, DD1_i, AA3_i, BB3_i, CC3_i, DD3_i, AA2_i, AA2D_i, CC2_i, CC2D_i, BB2, DD2;
+
+            AA1_i = (k(numnodes[1] - 1) + k(numnodes[1] - 2)) / (2 * std::pow(Inverse_nodes(0), 2));
+            BB1_i = -(k(numnodes[1] - 2) + 3 * k(numnodes[1] - 1)) / (2 * std::pow(Inverse_nodes(0), 2)) - (nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1)) / delt) * Layer_thickness(0) * Layer_thickness(0);
+            CC1_i = k(numnodes[1] - 1) / (1 * std::pow(Inverse_nodes(0), 2));
+            DD1_i = -((nodes[numnodes[1] - 1].rho(T(numnodes[1] - 1)) * nodes[numnodes[1] - 1].Cp(T(numnodes[1] - 1))) / delt) * (T(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0)) - SS(numnodes[1] - 1) * Layer_thickness(0) * Layer_thickness(0);
+
+            if (m_options.coordinateType != CoordinateType::Cartesian)
+            {
+
+                if (Outer_radius_instantaneous <= 0.0000001)
+                {
+                    CYSP2(AA1_i, BB1_i, CC1_i, k(numnodes[1] - 1), Inverse_nodes(0));
+                }
+                else if (Outer_radius_instantaneous > 0.0000001)
+                {
+                    CYSP1(AA1_i, CC1_i, k(numnodes[1] - 1), Layer_thickness(0), Inverse_nodes(0), Outer_radius_instantaneous);
+                }
+            }
+
+            AA3_i = k(numnodes[2] + 1) / (1 * std::pow(Inverse_nodes(2), 2));
+            BB3_i = -((k(numnodes[2] + 2)) + 3 * k(numnodes[2] + 1)) / (2 * std::pow(Inverse_nodes(2), 2)) - (nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1)) / delt) * Layer_thickness(2) * Layer_thickness(2);
+            CC3_i = ((k(numnodes[2] + 1) + k(numnodes[2] + 2))) / (2 * std::pow(Inverse_nodes(2), 2));
+            DD3_i = -((nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1))) / delt) * T(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2) - SS(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2);
+
+            if (m_options.coordinateType != CoordinateType::Cartesian)
+            {
+
+                if (Outer_radius_instantaneous <= 0.0000001)
+                {
+                    CYSP2(AA3_i, BB3_i, CC3_i, k(numnodes[2] + 1), Inverse_nodes(2));
+                }
+                else if (Outer_radius_instantaneous > 0.0000001)
+                {
+                    CYSP1(AA3_i, CC3_i, k(numnodes[2] + 1), Layer_thickness(2), Inverse_nodes(2), Outer_radius_instantaneous);
+                }
+            }
+
+            AA2_i = -k(numnodes[1] - 1) / (2 * Inverse_nodes(0) * Layer_thickness(0));
+            AA2D_i = k(numnodes[2] + 1) / (2 * Inverse_nodes(2) * Layer_thickness(2));
+            CC2_i = -AA2D_i;
+            CC2D_i = -AA2_i;
+            BB2 = 0;
+            DD2 = 0;
+
+            A(numnodes[1] - 1, numnodes[1] - 2) = AA1_i * CC2D_i * AA3_i - CC1_i * AA2_i * AA3_i;
+            A(numnodes[1] - 1, numnodes[1] - 1) = BB3_i * CC1_i * AA2D_i + BB1_i * CC2D_i * AA3_i - BB2 * CC1_i * AA3_i;
+            A(numnodes[1] - 1, numnodes[1]) = CC1_i * AA2D_i * CC3_i - AA3_i * CC1_i * CC2_i;
+            B(numnodes[1] - 1, 0) = DD3_i * CC1_i * AA2D_i + AA3_i * CC2D_i * DD1_i - DD2 * CC1_i * AA3_i;
+
+            for (int io = numnodes[1]; io < numnodes[2]; io++)
+            {
+                A(io, io - 1) = 1;
+                A(io, io) = -1;
+                A(io, io + 1) = 0;
+                B(io, 0) = 0;
+            }
+        }
     }
-    m_ContinuumSolver->Solve(300);
-    return ResponseResult();
+
+    if (Layers.GetCount() >= 2)
+    {
+
+        if (Layer_thickness(1) != 0)
+        {
+            if (MPD != 0)
+            {
+                A(numnodes[1] - 1, numnodes[1] - 2) = 0;
+                A(numnodes[1] - 1, numnodes[1] - 1) = 1;
+                A(numnodes[1] - 1, numnodes[1]) = 0;
+                B(numnodes[1] - 1, 0) = nodes[numnodes[1] - 1].Tpyro();
+            }
+            else if (MPD == 0 && Layer_thickness(0) == 0)
+            {
+                AA2_s = k(numnodes[1]) / (std::pow(Inverse_nodes(1), 2));
+                BB2_s = -(3 * k(numnodes[1]) + k(numnodes[1] + 1)) / (2 * std::pow(Inverse_nodes(1), 2)) - ((nodes[numnodes[1]].rho(T(numnodes[1] - 1)) * nodes[numnodes[1]].Cp(T(numnodes[1] - 1))) / delt) * Layer_thickness(1) * Layer_thickness(1);
+                CC2_s = (k(numnodes[1]) + k(numnodes[1] + 1)) / (2 * std::pow(Inverse_nodes(1), 2));
+                DD2_s = -((nodes[numnodes[1]].rho(T(numnodes[1] - 1)) * nodes[numnodes[1]].Cp(T(numnodes[1] - 1))) / delt) * T(numnodes[1] - 1) * Layer_thickness(1) * Layer_thickness(1) - SS(numnodes[1] - 1) * Layer_thickness(1) * Layer_thickness(1);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA2_s, BB2_s, CC2_s, k(numnodes[1]), Inverse_nodes(1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA2_s, CC2_s, k(numnodes[1]), Layer_thickness(1), Inverse_nodes(1), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA1_s = k(numnodes[1]) / (2 * Inverse_nodes(1) * Layer_thickness(1));
+                BB1_s = std::reduce(h_front.begin(), h_front.end(), heat_transfer_coefficient_outer);
+                CC1_s = -k(numnodes[1] + 1) / (2 * Inverse_nodes(1) * Layer_thickness(1));
+                DD1_s = (std::inner_product(h_front.begin(), h_front.end(), Tg_front.begin(), heat_transfer_coefficient_outer * Tg) - nodes[numnodes[1]].emissivity(T(numnodes[1] - 1)) * sigma * std::transform_reduce(Tamb_front.begin(), Tamb_front.end(), 0., std::plus<double>(), [&](double t)
+                                                                                                                                                                                                                        { return std::pow(T(numnodes[1] - 1), 4) - std::pow(t, 4); }) +
+                         +Flux_front);
+
+                A(numnodes[1] - 1, numnodes[1] - 2) = 0;
+                A(numnodes[1] - 1, numnodes[1] - 1) = BB1_s * AA2_s - AA1_s * BB2_s;
+                A(numnodes[1] - 1, numnodes[1]) = AA2_s * CC1_s - AA1_s * CC2_s;
+                B(numnodes[1] - 1, 0) = AA2_s * DD1_s - AA1_s * DD2_s;
+            }
+
+            for (int jojo = numnodes[1]; jojo < numnodes[2] - 1; jojo++)
+            {
+
+                double Factor_1, Factor_2;
+                A(jojo, jojo - 1) = (k(jojo) + k(jojo + 1)) / (2 * std::pow(Inverse_nodes(1), 2));
+                A(jojo, jojo) = -(k(jojo + 2) + 2 * k(jojo + 1) + k(jojo)) / (2 * std::pow(Inverse_nodes(1), 2)) - ((nodes[jojo].rho(T(jojo)) * nodes[jojo].Cp(T(jojo))) / delt) * Layer_thickness(1) * Layer_thickness(1);
+                A(jojo, jojo + 1) = (k(jojo + 1) + k(jojo + 2)) / (2 * std::pow(Inverse_nodes(1), 2));
+                Factor_1 = ((Layer_thickness(1)) * (MPD * (numnodes[2] - 1 - jojo) * nodes[jojo].rho(T(jojo)) * nodes[jojo].Cp(T(jojo)))) / (nodes[jojo].rhovirgin() - nodes[jojo].rhochar());
+                Factor_2 = Factor_1 / 2;
+                if (A(jojo, jojo - 1) < Factor_2)
+                {
+                    A(jojo, jojo) = A(jojo, jojo) - Factor_1;
+                    A(jojo, jojo + 1) = A(jojo, jojo + 1) + Factor_1;
+                }
+
+                else
+                {
+                    A(jojo, jojo - 1) = A(jojo, jojo - 1) - Factor_2;
+                    A(jojo, jojo + 1) = A(jojo, jojo + 1) + Factor_2;
+                }
+
+                B(jojo, 0) = -((nodes[jojo].rho(T(jojo)) * nodes[jojo].Cp(T(jojo))) / delt) * T(jojo) * Layer_thickness(1) * Layer_thickness(1) - SS(jojo) * Layer_thickness(1) * Layer_thickness(1);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+                    Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(1) * Inverse_nodes(1);
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(A(jojo, jojo - 1), A(jojo, jojo), A(jojo, jojo + 1), k(jojo + 1), Inverse_nodes(1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(A(jojo, jojo - 1), A(jojo, jojo + 1), k(jojo + 1), Layer_thickness(1), Inverse_nodes(1), Outer_radius_instantaneous);
+                    }
+                }
+            }
+
+            Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(1) * Inverse_nodes(1);
+
+            if (Layers.GetCount() < 3)
+            {
+                double AA2_b, BB2_b, CC2_b, DD2_b, AA1_b, BB1_b, CC1_b, DD1_b;
+                AA2_b = (k(numnodes[2] - 1) + k(numnodes[2])) / (2 * std::pow(Inverse_nodes(1), 2));
+                BB2_b = -(k(numnodes[2] - 1) + 3 * k(numnodes[2])) / (2 * std::pow(Inverse_nodes(1), 2)) - (nodes[numnodes[2] - 1].rho(T(numnodes[2] - 1)) * nodes[numnodes[2] - 1].Cp(T(numnodes[2] - 1)) / delt) * Layer_thickness(1) * Layer_thickness(1);
+                CC2_b = k(numnodes[2]) / (1 * pow(Inverse_nodes(1), 2));
+                DD2_b = -(nodes[numnodes[2] - 1].rho(T(numnodes[2] - 1)) * nodes[numnodes[2] - 1].Cp(T(numnodes[2] - 1)) / delt) * T(numnodes[2] - 1) * Layer_thickness(1) * Layer_thickness(1) - SS(numnodes[2] - 1) * Layer_thickness(1) * Layer_thickness(1);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA2_b, BB2_b, CC2_b, k(numnodes[2]), Inverse_nodes(1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA2_b, CC2_b, k(numnodes[2]), Layer_thickness(1), Inverse_nodes(1), Outer_radius_instantaneous);
+                    }
+                }
+
+                for (size_t i = 0; i < l_back.size(); i++)
+                {
+                    h_back.push_back(FreeConvection_Surface(T(numnodes[2] - 1), l_tg_back[i], l_back[i], m_params.Sea_Level_Pressure));
+                    Tg_back.push_back(l_tg_back[i]);
+                }
+
+                std::vector<double> h_radiation_loss_backwall;
+                for (size_t i = 0; i < Tamb_back.size(); i++)
+                {
+                    h_radiation_loss_backwall.push_back(sigma * nodes[numnodes[2] - 1].emissivity(numnodes[2] - 1) * (std::pow(T(numnodes[2] - 1), 3) + std::pow(T(numnodes[2] - 1), 2) * Tamb_back[i] + T(numnodes[2] - 1) * std::pow(Tamb_back[i], 2) + std::pow(Tamb_back[i], 3)));
+                }
+
+                AA1_b = k(numnodes[2]) / (2 * Layer_thickness(1) * Inverse_nodes(1));
+                BB1_b = std::reduce(h_back.begin(), h_back.end(), 0.) + std::reduce(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), 0.) + Propellant_Mass / delt;
+                CC1_b = -k(numnodes[2]) / (2 * Layer_thickness(1) * Inverse_nodes(1));
+                DD1_b = Flux_back + std::inner_product(h_back.begin(), h_back.end(), Tg_back.begin(), 0.) + std::inner_product(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), Tamb_back.begin(), 0.) +
+                        (Propellant_Mass * T(numnodes[2] - 1) / delt);
+
+                A(numnodes[2] - 1, numnodes[2] - 2) = CC1_b * AA2_b - CC2_b * AA1_b;
+                A(numnodes[2] - 1, numnodes[2] - 1) = CC1_b * BB2_b - CC2_b * BB1_b;
+                B(numnodes[2] - 1, 0) = CC1_b * DD2_b - CC2_b * DD1_b;
+            }
+
+            else if (Layers.GetCount() >= 3)
+            {
+                double AA1_i, BB1_i, CC1_i, DD1_i, AA3_i, BB3_i, CC3_i, DD3_i, AA2_i, AA2D_i, CC2_i, CC2D_i, BB2, DD2;
+
+                AA1_i = (k(numnodes[2] - 1) + k(numnodes[2])) / (2 * std::pow(Inverse_nodes(1), 2));
+                BB1_i = -(k(numnodes[2] - 1) + 3 * k(numnodes[2])) / (2 * std::pow(Inverse_nodes(1), 2)) - (nodes[numnodes[2] - 1].rho(T(numnodes[2] - 1)) * nodes[numnodes[2] - 1].Cp(T(numnodes[2] - 1)) / delt) * Layer_thickness(1) * Layer_thickness(1);
+                CC1_i = k(numnodes[2]) / (1 * pow(Inverse_nodes(1), 2));
+                DD1_i = -(nodes[numnodes[2] - 1].rho(T(numnodes[2] - 1)) * nodes[numnodes[2] - 1].Cp(T(numnodes[2] - 1)) / delt) * T(numnodes[2] - 1) * Layer_thickness(1) * Layer_thickness(1) - SS(numnodes[2] - 1) * Layer_thickness(1) * Layer_thickness(1);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA1_i, BB1_i, CC1_i, k(numnodes[2]), Inverse_nodes(1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA1_i, CC1_i, k(numnodes[2]), Layer_thickness(1), Inverse_nodes(1), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA3_i = (k(numnodes[2] + 1)) / (1 * std::pow(Inverse_nodes(2), 2));
+                BB3_i = -(k(numnodes[2] + 2) + 3 * k(numnodes[2] + 1)) / (2 * std::pow(Inverse_nodes(2), 2)) - (nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1)) / delt) * Layer_thickness(2) * Layer_thickness(2);
+                CC3_i = (k(numnodes[2] + 1) + k(numnodes[2] + 2)) / (2 * std::pow(Inverse_nodes(2), 2));
+                DD3_i = -((nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1)) / delt) * T(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2)) - SS(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA3_i, BB3_i, CC3_i, k(numnodes[2] + 1), Inverse_nodes(2));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA3_i, CC3_i, k(numnodes[2] + 1), Layer_thickness(2), Inverse_nodes(2), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA2_i = -(k(numnodes[2])) / (2 * Inverse_nodes(1) * Layer_thickness(1));
+                AA2D_i = k(numnodes[2] + 1) / (2 * Inverse_nodes(2) * Layer_thickness(2));
+                CC2_i = -AA2D_i;
+                CC2D_i = -AA2_i;
+
+                A(numnodes[2] - 1, numnodes[2] - 2) = AA1_i * CC2D_i * AA3_i - CC1_i * AA2_i * AA3_i;
+                A(numnodes[2] - 1, numnodes[2] - 1) = BB3_i * CC1_i * AA2D_i + BB1_i * CC2D_i * AA3_i;
+                A(numnodes[2] - 1, numnodes[2]) = CC1_i * AA2D_i * CC3_i - AA3_i * CC1_i * CC2_i;
+                B(numnodes[2] - 1, 0) = DD3_i * CC1_i * AA2D_i + AA3_i * CC2D_i * DD1_i;
+            }
+        }
+    }
+
+    if (Layers.GetCount() >= 3)
+    {
+        if (MPD == 0 && Layer_thickness(0) == 0 && Layer_thickness(1) == 0 && Layers.GetCount() >= 3)
+        {
+            AA2_s = k(numnodes[2] + 1) / (std::pow(Inverse_nodes(2), 2));
+            BB2_s = -(3 * k(numnodes[2] + 1) + k(numnodes[2] + 2)) / (2 * std::pow(Inverse_nodes(2), 2)) - (((nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1))) / delt) * Layer_thickness(2) * Layer_thickness(2));
+            CC2_s = (k(numnodes[2] + 1) + k(numnodes[2] + 2)) / (2 * std::pow(Inverse_nodes(2), 2));
+            DD2_s = -((nodes[numnodes[2]].rho(T(numnodes[2] - 1)) * nodes[numnodes[2]].Cp(T(numnodes[2] - 1)) / delt) * T(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2)) - SS(numnodes[2] - 1) * Layer_thickness(2) * Layer_thickness(2);
+
+            if (m_options.coordinateType != CoordinateType::Cartesian)
+            {
+
+                if (Outer_radius_instantaneous <= 0.0000001)
+                {
+                    CYSP2(AA2_s, BB2_s, CC2_s, k(numnodes[2] + 1), Inverse_nodes(2));
+                }
+                else if (Outer_radius_instantaneous > 0.0000001)
+                {
+                    CYSP1(AA2_s, CC2_s, k(numnodes[2] + 1), Layer_thickness(2), Inverse_nodes(2), Outer_radius_instantaneous);
+                }
+            }
+
+            AA1_s = (k(numnodes[2] + 1)) / (2 * Inverse_nodes(2) * Layer_thickness(2));
+            BB1_s = std::reduce(h_front.begin(), h_front.end(), heat_transfer_coefficient_outer);
+            CC1_s = -(k(numnodes[2] + 1)) / (2 * Inverse_nodes(2) * Layer_thickness(2));
+            DD1_s = (std::inner_product(h_front.begin(), h_front.end(), Tg_front.begin(), heat_transfer_coefficient_outer * Tg) - nodes[numnodes[2]].emissivity(T(numnodes[2] - 1)) * sigma * std::transform_reduce(Tamb_front.begin(), Tamb_front.end(), 0., std::plus<double>(), [&](double t)
+                                                                                                                                                                                                                    { return std::pow(T(numnodes[2] - 1), 4) - std::pow(t, 4); }) +
+                     +Flux_front);
+            A(numnodes[2] - 1, numnodes[2] - 2) = 0;
+            A(numnodes[2] - 1, numnodes[2] - 1) = BB1_s * AA2_s - AA1_s * BB2_s;
+            A(numnodes[2] - 1, numnodes[2]) = AA2_s * CC1_s - AA1_s * CC2_s;
+            B(numnodes[2] - 1, 0) = AA2_s * DD1_s - AA1_s * DD2_s;
+        }
+
+        ////// Before this correct numnodes usage
+
+        // correct j+1 here
+        for (int j = 3; j <= Layers.GetCount(); j++)
+        {
+
+            for (int ioi = numnodes[j - 1]; ioi < numnodes[j] - 1; ioi++)
+            {
+                //			A(ioi, ioi - 1) = (k(ioi + j - 3) + k(ioi + j - 2)) / (2 * pow(Inverse_nodes(j - 1) * Layer_thickness(j - 1), 2));
+                //			A(ioi, ioi) = -(k(ioi + j - 3) + 2 * k(ioi + j - 2) + k(ioi + j - 1)) / (2 * pow(Inverse_nodes(j - 1) * Layer_thickness(j - 1), 2)) - ((rho(ioi + j - 2) * Cp(ioi + j - 2)) / delt);
+                //			A(ioi, ioi + 1) = (k(ioi + j - 2) + k(ioi + j - 1)) / (2 * pow(Inverse_nodes(j - 1) * Layer_thickness(j - 1), 2));
+                //			B(ioi, 0) = -((rho(ioi + j - 2) * Cp(ioi + j - 2)) / delt) * T(ioi) - SS(ioi);
+
+                A(ioi, ioi - 1) = (k(ioi + j - 2) + k(ioi + j - 1)) / (2 * std::pow(Inverse_nodes(j - 1), 2));
+                A(ioi, ioi) = -(k(ioi + j - 2) + 2 * k(ioi + j - 1) + k(ioi + j)) / (2 * std::pow(Inverse_nodes(j - 1), 2)) - ((nodes[ioi].rho(T(ioi)) * nodes[ioi].Cp(T(ioi))) / delt) * std::pow(Layer_thickness(j - 1), 2);
+                A(ioi, ioi + 1) = (k(ioi + j - 1) + k(ioi + j)) / (2 * std::pow(Inverse_nodes(j - 1), 2));
+                B(ioi, 0) = -((nodes[ioi].rho(T(ioi)) * nodes[ioi].Cp(T(ioi))) / delt) * std::pow(Layer_thickness(j - 1), 2) * T(ioi) - SS(ioi) * std::pow(Layer_thickness(j - 1), 2);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+                    Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(j - 1) * Inverse_nodes(j - 1);
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(A(ioi, ioi - 1), A(ioi, ioi), A(ioi, ioi + 1), k(ioi + j - 1), Inverse_nodes(j - 1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(A(ioi, ioi - 1), A(ioi, ioi + 1), k(ioi + j - 1), Layer_thickness(j - 1), Inverse_nodes(j - 1), Outer_radius_instantaneous);
+                    }
+                }
+                //
+            }
+
+            Outer_radius_instantaneous = Outer_radius_instantaneous - Layer_thickness(j - 1) * Inverse_nodes(j - 1);
+
+            if (j != Layers.GetCount())
+            {
+                double AA1_i, BB1_i, CC1_i, DD1_i, AA3_i, BB3_i, CC3_i, DD3_i, AA2_i, AA2D_i, CC2_i, CC2D_i, BB2, DD2;
+
+                AA1_i = (k(numnodes[j] + j - 2) + k(numnodes[j] + j - 3)) / (2 * std::pow(Inverse_nodes(j - 1), 2));
+                BB1_i = -(k(numnodes[j] + j - 3) + 3 * k(numnodes[j] + j - 2)) / (2 * std::pow(Inverse_nodes(j - 1), 2)) - ((nodes[numnodes[j] - 1].rho(T(numnodes[j] - 1)) * nodes[numnodes[j] - 1].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j - 1), 2);
+                CC1_i = k(numnodes[j] + j - 2) / (std::pow(Inverse_nodes(j - 1), 2));
+                DD1_i = -((nodes[numnodes[j] - 1].rho(T(numnodes[j] - 1)) * nodes[numnodes[j] - 1].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j - 1), 2) * T(numnodes[j] - 1) - SS(numnodes[j] - 1) * std::pow(Layer_thickness(j - 1), 2);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA1_i, BB1_i, CC1_i, k(numnodes[j] + j - 2), Inverse_nodes(j - 1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA1_i, CC1_i, k(numnodes[j] + j - 2), Layer_thickness(j - 1), Inverse_nodes(j - 1), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA3_i = k(numnodes[j] + j - 1) / (std::pow(Inverse_nodes(j), 2));
+                BB3_i = -(k(numnodes[j] + j) + 3 * k(numnodes[j] + j - 1)) / (2 * (std::pow(Inverse_nodes(j), 2))) - ((nodes[numnodes[j]].rho(T(numnodes[j] - 1)) * nodes[numnodes[j]].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j), 2);
+                CC3_i = (k(numnodes[j] + j - 1) + k(numnodes[j] + j)) / (2 * (std::pow(Inverse_nodes(j), 2)));
+                DD3_i = -((nodes[numnodes[j]].rho(T(numnodes[j] - 1)) * nodes[numnodes[j]].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j), 2) * T(numnodes[j] - 1) - SS(numnodes[j] - 1) * std::pow(Layer_thickness(j), 2);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA3_i, BB3_i, CC3_i, k(numnodes[j] + j - 1), Inverse_nodes(j));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA3_i, CC3_i, k(numnodes[j] + j - 1), Layer_thickness(j), Inverse_nodes(j), Outer_radius_instantaneous);
+                    }
+                }
+
+                AA2_i = -(k(numnodes[j] + j - 2) / (2 * Inverse_nodes(j - 1) * Layer_thickness(j - 1)));
+                AA2D_i = k(numnodes[j] + j - 1) / (2 * Inverse_nodes(j) * Layer_thickness(j));
+                CC2_i = -AA2D_i;
+                CC2D_i = -AA2_i;
+
+                A(numnodes[j] - 1, numnodes[j] - 2) = AA1_i * CC2D_i * AA3_i - CC1_i * AA2_i * AA3_i;
+                A(numnodes[j] - 1, numnodes[j] - 1) = BB3_i * CC1_i * AA2D_i + BB1_i * CC2D_i * AA3_i;
+                A(numnodes[j] - 1, numnodes[j]) = CC1_i * AA2D_i * CC3_i - AA3_i * CC1_i * CC2_i;
+                B(numnodes[j] - 1, 0) = DD3_i * CC1_i * AA2D_i + AA3_i * CC2D_i * DD1_i;
+            }
+
+            if (j == Layers.GetCount())
+            {
+                double AA2_b, BB2_b, CC2_b, DD2_b, AA1_b, BB1_b, CC1_b, DD1_b;
+                //			AA2_b = (k(No_of_nodes.sum() + No_of_Layers - 1) + k(No_of_nodes.sum() + No_of_Layers - 2)) / (2 * pow(Inverse_nodes(No_of_Layers - 1) * Layer_thickness(No_of_Layers - 1), 2));
+                //			BB2_b = -(3 * k(No_of_nodes.sum() + No_of_Layers - 1) + k(No_of_nodes.sum() + No_of_Layers - 2)) / (2 * pow(Inverse_nodes(No_of_Layers - 1) * Layer_thickness(No_of_Layers - 1), 2)) - (rho(No_of_nodes.sum() + No_of_Layers - 1) * Cp(No_of_nodes.sum() + No_of_Layers - 1)) / delt;
+                //			CC2_b = k(No_of_nodes.sum() + No_of_Layers - 1) / (1 * pow(Inverse_nodes(No_of_Layers - 1) * Layer_thickness(No_of_Layers - 1), 2));
+                //			DD2_b = -(rho(No_of_nodes.sum() + No_of_Layers - 1) * Cp(No_of_nodes.sum() + No_of_Layers - 1) / delt) * T(No_of_nodes.sum()) - SS(No_of_nodes.sum());
+
+                AA2_b = (k(numnodes[j] + j - 2) + k(numnodes[j] + j - 3)) / (2 * std::pow(Inverse_nodes(j - 1), 2));
+                BB2_b = -(k(numnodes[j] + j - 3) + 3 * k(numnodes[j] + j - 2)) / (2 * std::pow(Inverse_nodes(j - 1), 2)) - ((nodes[numnodes[j] - 1].rho(T(numnodes[j] - 1)) * nodes[numnodes[j] - 1].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j - 1), 2);
+                CC2_b = k(numnodes[j] + j - 2) / (std::pow(Inverse_nodes(j - 1), 2));
+                DD2_b = -((nodes[numnodes[j] - 1].rho(T(numnodes[j] - 1)) * nodes[numnodes[j] - 1].Cp(T(numnodes[j] - 1))) / delt) * std::pow(Layer_thickness(j - 1), 2) * T(numnodes[j] - 1) - SS(numnodes[j] - 1) * std::pow(Layer_thickness(j - 1), 2);
+
+                if (m_options.coordinateType != CoordinateType::Cartesian)
+                {
+
+                    if (Outer_radius_instantaneous <= 0.0000001)
+                    {
+                        CYSP2(AA2_b, BB2_b, CC2_b, k(numnodes[j] + j - 2), Inverse_nodes(j - 1));
+                    }
+                    else if (Outer_radius_instantaneous > 0.0000001)
+                    {
+                        CYSP1(AA2_b, CC2_b, k(numnodes[j] + j - 2), Layer_thickness(j - 1), Inverse_nodes(j - 1), Outer_radius_instantaneous);
+                    }
+                }
+
+                for (size_t i = 0; i < l_back.size(); i++)
+                {
+                    h_back.push_back(FreeConvection_Surface(T(numnodes[j] - 1), l_tg_back[i], l_back[i], m_params.Sea_Level_Pressure));
+                    Tg_back.push_back(l_tg_back[i]);
+                }
+
+                std::vector<double> h_radiation_loss_backwall;
+                for (size_t i = 0; i < Tamb_back.size(); i++)
+                {
+                    h_radiation_loss_backwall.push_back(sigma * nodes[numnodes[j] - 1].emissivity(numnodes[j] - 1) * (std::pow(T(numnodes[j] - 1), 3) + std::pow(T(numnodes[j] - 1), 2) * Tamb_back[i] + T(numnodes[j] - 1) * std::pow(Tamb_back[i], 2) + std::pow(Tamb_back[i], 3)));
+                }
+
+                AA1_b = k(numnodes[j] + Layers.GetCount() - 2) / (2 * Layer_thickness(Layers.GetCount() - 1) * Inverse_nodes(Layers.GetCount() - 1));
+                BB1_b = std::reduce(h_back.begin(), h_back.end(), 0.) + std::reduce(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), 0.) + Propellant_Mass / delt;
+                CC1_b = -k(numnodes[j] + Layers.GetCount() - 2) / (2 * Layer_thickness(Layers.GetCount() - 1) * Inverse_nodes(Layers.GetCount() - 1));
+                DD1_b = Flux_back + std::inner_product(h_back.begin(), h_back.end(), Tg_back.begin(), 0.) + std::inner_product(h_radiation_loss_backwall.begin(), h_radiation_loss_backwall.end(), Tamb_back.begin(), 0.) +
+                        (Propellant_Mass * T(numnodes[j] - 1) / delt);
+
+                A(numnodes[j] - 1, numnodes[j] - 2) = CC1_b * AA2_b - CC2_b * AA1_b;
+                A(numnodes[j] - 1, numnodes[j] - 1) = CC1_b * BB2_b - CC2_b * BB1_b;
+                B(numnodes[j] - 1, 0) = CC1_b * DD2_b - CC2_b * DD1_b;
+            }
+        }
+    }
+// #define DEBUG_PRINT
+#ifdef DEBUG_PRINT
+    std::ofstream outfile("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/matrix.csv");
+    outfile << "A:\n";
+    outfile << A;
+    outfile << "\n\nB:\n";
+    outfile << B;
+    outfile << "\n\nT:\n";
+    outfile << T;
+#endif
+
+    if (Layers.GetCount() < 2)
+    {
+        if (Layer_thickness(0) != 0)
+        {
+            MatrixXd A1, B1;
+            VectorXd T1;
+            A1 = MatrixXd::Zero(numnodes[Layers.GetCount()], Layers.GetCount());
+            B1 = MatrixXd::Zero(numnodes[Layers.GetCount()], 1);
+            T1 = VectorXd::Zero(numnodes[Layers.GetCount()]);
+            A1 = A;
+            B1 = B;
+            T1 = A1.colPivHouseholderQr().solve(B1);
+            // T1=A1.lu().solve(B1);
+            T = T1;
+            // cout << A1 << endl;
+            // cout << T1 << endl;
+        }
+    }
+    if (Layers.GetCount() >= 2)
+    {
+        if (Layer_thickness(0) != 0)
+        {
+            MatrixXd A1, B1;
+            VectorXd T1;
+            A1 = MatrixXd::Zero(numnodes[Layers.GetCount()], numnodes[Layers.GetCount()]);
+            B1 = MatrixXd::Zero(numnodes[Layers.GetCount()], 1);
+            T1 = VectorXd::Zero(numnodes[Layers.GetCount()]);
+            A1 = A;
+            B1 = B;
+            T1 = A1.colPivHouseholderQr().solve(B1);
+
+            T = T1;
+        }
+        else if (Layer_thickness(0) == 0 && Layer_thickness(1) != 0)
+        {
+            MatrixXd A1, B1;
+            VectorXd T1;
+            A1 = MatrixXd::Zero(numnodes[Layers.GetCount()] - numnodes[1] + 1, numnodes[Layers.GetCount()] - numnodes[1] + 1);
+            B1 = MatrixXd::Zero(numnodes[Layers.GetCount()] - numnodes[1] + 1, 1);
+
+            T1 = VectorXd::Zero(numnodes[Layers.GetCount()] - numnodes[1] + 1, 1);
+            A1 = A.block(numnodes[1] - 1, numnodes[1] - 1, numnodes[Layers.GetCount()] - numnodes[1] + 1, numnodes[Layers.GetCount()] - numnodes[1] + 1);
+            B1 = B.block(numnodes[1] - 1, 0, numnodes[Layers.GetCount()] - numnodes[1] + 1, 1);
+
+            T1 = A1.colPivHouseholderQr().solve(B1);
+            // cout << T1 << endl;
+            T.segment(numnodes[1] - 1, numnodes[Layers.GetCount()] - numnodes[1] + 1) = T1;
+        }
+        else
+        {
+            MatrixXd A1, B1;
+            VectorXd T1;
+            A1 = MatrixXd::Zero(numnodes[Layers.GetCount()] - numnodes[2] + 1, numnodes[Layers.GetCount()] - numnodes[2] + 1);
+            B1 = MatrixXd::Zero(numnodes[Layers.GetCount()] - numnodes[2] + 1, 1);
+            T1 = VectorXd::Zero(numnodes[Layers.GetCount()] - numnodes[2] + 1, 1);
+            A1 = A.block(numnodes[2] - 1, numnodes[2] - 1, numnodes[Layers.GetCount()] - numnodes[2] + 1, numnodes[Layers.GetCount()] - numnodes[2] + 1);
+            B1 = B.block(numnodes[2] - 1, 0, numnodes[Layers.GetCount()] - numnodes[2] + 1, 1);
+            T1 = A1.colPivHouseholderQr().solve(B1);
+            T.segment(numnodes[2] - 1, numnodes[Layers.GetCount()] - numnodes[2] + 1) = T1;
+
+            // std::ofstream outfile("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/matrix.csv", std::ios::app);
+            // outfile << "A1:\n";
+            // outfile << A1;
+            // outfile << "\n\nB1:\n";
+            // outfile << B1;
+            // outfile << "\n\nT1:\n";
+            // outfile << T1;
+        }
+    }
+    // m_ContinuumSolver->Solve(300);
+    // return ResponseResult();
+}
+
+OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
+{
+    using namespace Eigen;
+
+    auto Layers = *m_Layers;
+    int TIME_STEP_REDUCED_ITERATION = 0;
+    int INNER_ITER = 0;
+    int CONVERGENCE_CONDITIONS_MET = 0;
+    int IXFIST = 0;
+    int GONE_IN_TIME_STEP_REDUCTION = 0;
+    int NODES_1;
+    VectorXd Layer_thickness, Initial_Layer_thickness;
+    Layer_thickness = VectorXd::Zero(Layers.GetCount());
+    Initial_Layer_thickness = VectorXd::Zero(Layers.GetCount());
+    ResponseResult result;
+
+    for (size_t i = 0; i < Layers.GetCount(); i++)
+    {
+
+        Layer_thickness(i) = Layers[i].thickness;
+        Initial_Layer_thickness(i) = Layers[i].thickness;
+    }
+
+    auto nodes = m_Layers->Nodes;
+    auto numnodes = m_Layers->NumNodes;
+    VectorXd T(numnodes[Layers.GetCount()]);
+    VectorXd k(numnodes[Layers.GetCount()] + Layers.GetCount() - 1);
+    // Assign initial temperature;
+    for (int g = 0; g < numnodes[Layers.GetCount()]; g++)
+    {
+        T(g) = nodes[g].T;
+    }
+
+    double time;
+    double time_store;
+    double delt, delt_store;
+    time = m_params.tInit;
+
+    double Mass_rate_Pyrolysis = m_params.massRatePyro;
+    double Mass_rate_Char = m_params.massRateChar;
+    std::vector<double> solution_t;
+    std::vector<std::vector<double>> solution_T;
+    // Time Loop
+    solution_t.push_back(time);
+    solution_T.emplace_back(T.begin(), T.end());
+    while (time < m_params.tFinal)
+    {
+        // delt=m_params[time];  //When Table option is incorporated
+        delt = m_params.timestep[time];
+        time = time + delt;
+        delt_store = delt;
+
+        TIME_STEP_REDUCED_ITERATION = 0;
+        INNER_ITER = 0;
+        CONVERGENCE_CONDITIONS_MET = 0;
+
+        while (TIME_STEP_REDUCED_ITERATION <= 10 && (INNER_ITER > 10 || CONVERGENCE_CONDITIONS_MET == 0))
+        {
+            //				//INNER_ITER = 0;
+            //
+            while (INNER_ITER <= 10 && CONVERGENCE_CONDITIONS_MET == 0)
+            //
+            {
+                INNER_ITER = INNER_ITER + 1;
+                //
+                if ((T(numnodes[1] - 1) > nodes[numnodes[1] - 1].Tpyro() - m_params.Ttol) && IXFIST == 0)
+                {
+                    if (!m_options.Sublime)
+                    {
+                        for (int ijk = 0; ijk < numnodes[1] - 1; ijk++)
+                        {
+                            NODES_1 = numnodes[1] - 1 - 1 - ijk;
+                            T(NODES_1) = T(NODES_1 + 1);
+                        }
+                        IXFIST = 1;
+                    }
+
+                    else
+                    {
+                        IXFIST = 1;
+                    }
+                }
+                // Air gap
+
+                double h_convection_air_gap = 0;
+                double h_radiation_air_gap = 0;
+
+                for (int i = 0; i < Layers.GetCount(); i++)
+                {
+                    if (Layers[i].material->name == "air") // Ask
+                    {
+                        Air_Gap(h_convection_air_gap, h_radiation_air_gap, Layers[i].thickness, m_params.Air_Layer_Length, T(numnodes[i] - 1), T(numnodes[i + 1] - 1), m_params.Air_Layer_Length, nodes[numnodes[i] - 1].emissivity(T(numnodes[i] - 1)), nodes[numnodes[i + 1] - 1].emissivity(T(numnodes[i + 1] - 1)));
+                    }
+                }
+                for (int nodes0_j = 0; nodes0_j <= numnodes[1] - 1; nodes0_j++)
+                {
+                    k(nodes0_j) = nodes[nodes0_j].k(T(nodes0_j));
+                }
+
+                if (Layers.GetCount() > 1)
+                {
+
+                    for (int mat_j = 1; mat_j < Layers.GetCount(); mat_j++)
+                    {
+
+                        for (int nodes_j = numnodes[mat_j] - 1 + mat_j; nodes_j <= numnodes[mat_j + 1] - 1 + mat_j; nodes_j++)
+                        {
+                            if (nodes_j == numnodes[mat_j] - 1 + mat_j)
+                            {
+                                k(nodes_j) = nodes[nodes_j - mat_j + 1].k(T(nodes_j - mat_j));
+                            }
+                            else
+                            {
+                                k(nodes_j) = nodes[nodes_j - mat_j].k(T(nodes_j - mat_j));
+                            }
+
+                            if (Layers[mat_j].material->name == "air")
+                            {
+                                k(nodes_j) = k(nodes_j) + Layer_thickness(mat_j - 1) * (abs(h_convection_air_gap + h_radiation_air_gap));
+                            }
+                        }
+                        // add perturbation terms also here
+                    }
+                }
+
+                double Twall;
+                int Boundary_Node;
+
+                Twall = T(0);
+                Boundary_Node = 0;
+                if (Layer_thickness(0) == 0)
+                {
+                    Twall = T(numnodes[1] - 1);
+                    Boundary_Node = numnodes[1] - 1;
+                }
+                else if (Layer_thickness(0) == 0 && Layer_thickness(1) == 0)
+                {
+                    Twall = T(numnodes[2] - 1);
+                    Boundary_Node = numnodes[2] - 1;
+                }
+
+                assert(m_HFSolver->GetTrajectory() != nullptr);
+                auto res = m_HFSolver->Solve(time, Twall);
+                double heat_transfer_coefficient_outer, Tg;
+                heat_transfer_coefficient_outer = res.h[0];
+                Tg = res.Tg[0];
+
+                BCS BoundaryConditions;
+
+                for (auto &&i : m_BCs)
+                {
+                    if (i->type == BCType::Radiation)
+                    {
+                        auto temp = std::dynamic_pointer_cast<RadiationBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.Tambient_front.push_back(temp->Tambient[time]);
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.Tambient_back.push_back(temp->Tambient[time]);
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.Tambient_front.push_back(temp->Tambient[time]);
+                            BoundaryConditions.Tambient_back.push_back(temp->Tambient[time]);
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else if (i->type == BCType::Flux)
+                    {
+                        auto temp = std::dynamic_pointer_cast<FluxBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.flux_front += temp->flux[time];
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.flux_back += temp->flux[time];
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.flux_back += temp->flux[time];
+                            BoundaryConditions.flux_front += temp->flux[time];
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else if (i->type == BCType::Convection)
+                    {
+                        auto temp = std::dynamic_pointer_cast<ConvectionBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.h_front.push_back(temp->h[time]);
+                            BoundaryConditions.Tg_front.push_back(temp->tg[time]);
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.h_back.push_back(temp->h[time]);
+                            BoundaryConditions.Tg_back.push_back(temp->tg[time]);
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.h_back.push_back(temp->h[time]);
+                            BoundaryConditions.h_front.push_back(temp->h[time]);
+                            BoundaryConditions.Tg_back.push_back(temp->tg[time]);
+                            BoundaryConditions.Tg_front.push_back(temp->tg[time]);
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else if (i->type == BCType::NaturalConvection)
+                    {
+                        auto temp = std::dynamic_pointer_cast<NaturalConvectionBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.l_front.push_back(temp->l);
+                            BoundaryConditions.l_tg_front.push_back(temp->tg[time]);
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.l_back.push_back(temp->l);
+                            BoundaryConditions.l_tg_back.push_back(temp->tg[time]);
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.l_back.push_back(temp->l);
+                            BoundaryConditions.l_front.push_back(temp->l);
+                            BoundaryConditions.l_tg_back.push_back(temp->tg[time]);
+                            BoundaryConditions.l_tg_front.push_back(temp->tg[time]);
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else if (i->type == BCType::PropellantMass)
+                    {
+                        auto temp = std::dynamic_pointer_cast<PropellantMassBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.propellant_mass_front += temp->propmass[time];
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.propellant_mass_back += temp->propmass[time];
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.propellant_mass_front += temp->propmass[time];
+                            BoundaryConditions.propellant_mass_back += temp->propmass[time];
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else if (i->type == BCType::HeatGeneration)
+                    {
+                        auto temp = std::dynamic_pointer_cast<HeatGenBC>(i);
+                        switch (temp->location)
+                        {
+                        case BCLocation::front:
+                            BoundaryConditions.qgen += temp->qdot[time];
+                            break;
+                        case BCLocation::back:
+                            BoundaryConditions.qgen += temp->qdot[time];
+                            break;
+                        case BCLocation::both:
+                            BoundaryConditions.qgen += temp->qdot[time];
+                            BoundaryConditions.qgen += temp->qdot[time];
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+
+                double Layer_thickness_old_char, Layer_thickness_old_virgin;
+                Layer_thickness_old_char = Layer_thickness(0);
+                Layer_thickness_old_virgin = Layer_thickness(1);
+
+                double Q_convection_front, Q_radiation_front;
+                Q_convection_front = std::transform_reduce(BoundaryConditions.h_front.begin(),
+                                                           BoundaryConditions.h_front.end(),
+                                                           BoundaryConditions.Tg_front.begin(),
+                                                           BoundaryConditions.flux_front + res.q[0],
+                                                           std::plus<double>(),
+                                                           [&Twall](double h, double tg)
+                                                           {
+                                                               return h * (tg - Twall);
+                                                           });
+                Q_radiation_front = 0.;
+
+                if (((Layers.GetCount()) >= 2 && Layer_thickness(0) != 0 && Layer_thickness(1) != 0) || (Mass_rate_Pyrolysis != 0 || T(numnodes[1] - 1) > nodes[numnodes[1] - 1].Tpyro() - 1))
+                {
+
+                    Instantaneous_MassRate_ThicknessSolver(Layer_thickness(0), Layer_thickness(1), Mass_rate_Char, Mass_rate_Pyrolysis, Q_convection_front, Q_radiation_front, T, delt, BoundaryConditions);
+                }
+
+                if (Layer_thickness(1) < 0.000001)
+                {
+                    Layer_thickness(1) = 0;
+                }
+
+                DefaultResponseMatrix(T, Layer_thickness, Initial_Layer_thickness, heat_transfer_coefficient_outer, Tg, BoundaryConditions, Mass_rate_Char, Mass_rate_Pyrolysis, k, delt);
+
+                if (abs(T(Boundary_Node) - Twall) < m_params.Ttol)
+                {
+                    CONVERGENCE_CONDITIONS_MET = 1;
+                }
+                double DX1, DX2, PDX1, PDX2;
+                DX1 = abs(Layer_thickness(0) - Layer_thickness_old_char);
+                DX2 = abs(Layer_thickness(1) - Layer_thickness_old_virgin);
+                PDX1 = 0;
+                PDX2 = 0;
+                if (Layer_thickness(0) != 0)
+                {
+                    PDX1 = DX1 / Layer_thickness(0);
+                }
+                if (Layer_thickness(1) != 0)
+                {
+                    PDX2 = DX2 / Layer_thickness(1);
+                }
+                if ((T(0) > nodes[0].Tabl() + 1 && Mass_rate_Char > 0.00001) || (T(numnodes[1] - 1) > nodes[numnodes[1] - 1].Tpyro() + 1 && Mass_rate_Pyrolysis > 0.00001) || (DX1 > 0.000001 || PDX1 > 0.001) || (DX2 > 0.000001 || PDX2 > 0.001))
+                {
+                    CONVERGENCE_CONDITIONS_MET = 0;
+                }
+                else
+                {
+                    CONVERGENCE_CONDITIONS_MET = 1;
+                }
+                //
+                INNER_ITER = INNER_ITER + 1;
+            }
+
+            if (INNER_ITER > 10 && CONVERGENCE_CONDITIONS_MET == 0)
+            {
+                INNER_ITER = 0;
+                delt = delt / 2;
+                TIME_STEP_REDUCED_ITERATION = TIME_STEP_REDUCED_ITERATION + 1;
+                time = time_store + delt;
+                GONE_IN_TIME_STEP_REDUCTION = 1;
+            }
+        }
+        if (GONE_IN_TIME_STEP_REDUCTION == 1)
+        {
+            GONE_IN_TIME_STEP_REDUCTION = 0;
+            time_store = time;
+            delt = delt_store - delt;
+            delt_store = delt;
+            time = time_store + delt;
+        }
+        solution_t.push_back(time);
+        solution_T.emplace_back(T.begin(), T.end());
+    }
+
+    result.solution_T = solution_T;
+    result.solution_t = solution_t;
+    for (auto &&i : numnodes)
+        i -= 1;
+    numnodes[0] = 0;
+    result.interface_index = numnodes;
+    result.message = "Will see..\n";
+    return result;
 }

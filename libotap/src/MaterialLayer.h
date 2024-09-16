@@ -32,6 +32,7 @@ namespace OTAP
         double Tpyro() { return m_Material->Tpyro; }
         double Habl() { return m_Material->Habl; }
         double Hpyro() { return m_Material->Hpyro; }
+        double rhovirgin() { return rho(Tpyro()); }
         double k(double pT) { return m_Material->k[pT]; }
         double rho(double pT) { return m_Material->rho[pT]; }
         double rhochar(double pT) { return m_Material->rhochar[pT]; }

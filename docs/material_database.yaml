@@ -64,3 +64,69 @@ data:
     ablation_temperature: 10000
     pyrolysis_enthalpy: 1.0e+9
     ablation_enthalpy: 1.0e+9
+
+  air: #TODO: Update This
+    density:
+      T: [250,2000]
+      val: [2800,2800]
+    char_density:
+      T: [250,2000]
+      val: [2800,2800]
+    pyrogas_density:
+      T: [250,2000]
+      val: [0,0]
+    conductivity:
+      T: [250,2000]
+      val: [121,121]
+    char_conductivity:
+      T: [250,2000]
+      val: [121,121]
+    specific_heat:
+      T: [250,2000]
+      val: [963,963]
+    char_specific_heat:
+      T: [250,2000]
+      val: [963,963]
+    pyrogas_specific_heat:
+      T: [250,2000]
+      val: [0,0]
+    emissivity:
+      T: [250,2000]
+      val: [0.12,0.12]
+    pyrolysis_temperature: 10000
+    ablation_temperature: 10000
+    pyrolysis_enthalpy: 1.0e+9
+    ablation_enthalpy: 1.0e+9
+
+  carbon_phenolic:
+    density:
+      T: [290.0,294.0,473.0,673.0,873.0,1023.0,1025.0]
+      val: [1418.0,1418.0,1418.0,1361.0,1275.0,1051.0,1051.0]
+    char_density:
+      T: [290,1200]
+      val: [1051,1051]
+    pyrogas_density:
+      T: [290,1200]
+      val: [1051,1051]
+    conductivity:
+      T: [290.0,294.0,473.0,673.0,873.0,1023.0,1025.0]
+      val: [1.079988, 1.079988, 1.389752, 1.498588, 1.766492, 2.059512,2.059512]
+    char_conductivity:
+      T: [290,1200]
+      val: [2.059512, 2.059512]
+    specific_heat:
+      T: [290.0,294.0,473.0,673.0,873.0,1023.0,1025.0]
+      val: [1431.612, 1431.612, 1762.306, 1921.374, 2243.696, 2792.062,2792.062]
+    char_specific_heat:
+      T: [290,1200]
+      val: [2792.062, 2792.062]
+    pyrogas_specific_heat:
+      T: [290,1200]
+      val: [0, 0]
+    emissivity:
+      T: [300,1200]
+      val: [0.9,0.9]
+    pyrolysis_temperature: 823
+    ablation_temperature: 2173
+    pyrolysis_enthalpy: 774996.04
+    ablation_enthalpy: 14400007.44
