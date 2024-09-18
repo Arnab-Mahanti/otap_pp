@@ -1,4 +1,6 @@
 #pragma once
+#include <memory>
+#include <string>
 
 #include "OTypes.h"
 #include "Fluid.h"
@@ -8,7 +10,6 @@
 #include "Trajectory.h"
 #include "Table.h"
 #include "BC.h"
-#include <memory>
 #include "Eigen/Eigen"
 
 namespace OTAP
@@ -324,9 +325,39 @@ namespace OTAP
     struct ResponseResult
     {
         std::vector<double> solution_t;
-        std::vector<std::vector<double>> solution_T;
+        TableGrid<double, TableGridOrder::ColumnFirst, TableGridOrder::RowFirst> solution_T;
         std::vector<size_t> interface_index;
         std::string message;
+
+        void Save(const std::string &filepath, bool all = false, bool delim_whitespace = true) const
+        {
+            std::ofstream o(filepath);
+            Save(o, all, delim_whitespace);
+        }
+        void Save(std::ostream &stream, bool all = false, bool delim_whitespace = true) const
+        {
+            TableGrid<double, TableGridOrder::RowFirst, TableGridOrder::RowFirst> temp;
+            if (all)
+            {
+                temp = solution_T.data();
+            }
+            else
+            {
+                auto data = solution_T.data();
+                std::vector<double> selected;
+                for (size_t j = 0; j < solution_T.getColumnCount(); j++)
+                {
+                    for (auto &&i : interface_index)
+                    {
+                        selected.push_back(data[j][i]);
+                    }
+                    temp.addColumn(selected);
+                    selected.clear();
+                }
+            }
+            temp.insertRow(0, solution_t);
+            temp.Save(stream, delim_whitespace);
+        }
     };
 
     class ResponseSolverBase // FIXME: Enforce heat flux solver to have trajectory

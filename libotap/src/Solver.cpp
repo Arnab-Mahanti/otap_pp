@@ -1467,7 +1467,6 @@ void OTAP::DefaultResponseSolver::DefaultResponseMatrix(Eigen::VectorXd &T, Eige
     // T = VectorXd::Constant(numnodes[Layers.GetCount()]-1, 0);
     SS = VectorXd::Constant(numnodes[Layers.GetCount()], qgen);
 
-
     VectorXd Inverse_nodes(Layers.GetCount());
 
     for (size_t i = 0; i < Layers.GetCount(); i++)

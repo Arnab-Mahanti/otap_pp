@@ -29,8 +29,10 @@ namespace OTAP
 
     public:
         // static inline auto materialManager = MaterialManager("I:/Arnab/Projects/MISC/OTAP++/docs/material_databse.yaml");
-        Geometry geometry;
-        Trajectory trajectory;
+        std::vector<Geometry> geometry;
+        std::vector<Trajectory> trajectory;
+        
+        
 
         static State &GetInstance()
         {

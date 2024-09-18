@@ -11,11 +11,11 @@
 namespace OTAP
 {
 
-
     struct ProblemSpecification
     {
         ProblemType problemType;
-        CoordinateType coordinateType;
+        CoordinateType fluxCSYS;
+        CoordinateType responseCSYS;
         FlowType flowType;
         FluidType fluidType;
     };
@@ -34,6 +34,7 @@ namespace OTAP
         virtual ~ProblemBase() = default;
         virtual void Validate() const { assert(false); };
         virtual void Solve() { assert(false); };
+        virtual void Solve(double location) { assert(false); }
     };
 
     // Returns HF for all loc for all time
@@ -49,6 +50,31 @@ namespace OTAP
         virtual void Solve() override;
     };
 
+    struct ResponseSolution
+    {
+        std::vector<double> locations;
+        std::vector<ResponseResult> solution;
+    };
+
+    // FIXME: How to link to ProblemBase
+    // class ResponseProblem
+    // {
+    // private:
+    //     ProblemSpecification m_spec;
+    //     Geometry m_geom;
+    //     std::vector<double> m_locations;
+    //     std::unordered_map<double, std::shared_ptr<LayerMesh>> m_analysis;
+
+    // public:
+    //     ResponseProblem(const ProblemSpecification &spec, const Geometry &geom, Trajectory traj, BCArray bcs, TimeSeries?? Tinit, size_t numlocations)
+    //         : m_spec(spec), m_geom(geom) {}
+    //     ResponseProblem(const ProblemSpecification &spec, const Geometry &geom, Trajectory traj, BCArray bcs, TimeSeries?? Tinit, std::vector<double> locations, )
+    //         : m_spec(spec), m_geom(geom) {}
+    //     virtual ~ResponseProblem() = default;
+    //     virtual bool Validate() const;
+    //     virtual ResponseSolution Solve();
+    //     virtual ResponseSolution Solve(double location, TimeSeries Tinit);
+    // };
 } // namespace OTAP
 
 #endif // _PROBLEM_H

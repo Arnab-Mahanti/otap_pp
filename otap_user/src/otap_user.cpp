@@ -348,25 +348,9 @@ int main()
     auto start = std::chrono::high_resolution_clock::now();
     auto solution = response->Solve();
 
-    std::ofstream outfile("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/solution.csv");
-    outfile << " " << ", ";
-    for (size_t i = 0; i < solution.solution_T[0].size(); i++)
-    {
-        outfile << i << ", ";
-    }
-    outfile << '\n';
-
-    for (size_t i = 0; i < solution.solution_T.size(); i++)
-    {
-        outfile << solution.solution_t[i] << ", ";
-        for (auto &&j : solution.solution_T[i])
-        {
-            outfile << j << ", ";
-        }
-        outfile << '\n';
-    }
 
     std::cout << "Computed in: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << "ms \n";
+    solution.Save("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/solution.csv");
 
     // std::vector<double> backwall;
 
@@ -379,6 +363,19 @@ int main()
     // matplot::xlabel("Time(s)");
     // matplot::ylabel("Temperature");
     // matplot::show();
+
+    // TableGrid t("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/trajectory.dat");
+    // t.Save("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/trajectory_d.txt", false);
+
+    // t = {{1, 2, 3},
+    //      {4, 5, 6}};
+    // std::cout << t;
+    // t.addRow({0, 0});
+    // std::cout << t;
+    // t.addColumn({7, 8, 9, 0});
+    // std::cout << t;
+
+    // std::vector<std::vector<double>> vec = {{1,2},{3,4,5}};
 
     return 0;
 }
