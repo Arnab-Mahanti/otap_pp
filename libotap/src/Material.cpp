@@ -10,7 +10,7 @@ OTAP::MaterialManager::MaterialManager(const std::string &databasePath)
     m_database = ryml::parse_in_arena(ryml::to_csubstr(contents));
 }
 
-std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const std::string &name)
+std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const std::string &name, bool sublime)
 {
     if (m_cache.find(name) != m_cache.end())
         return m_cache[name];
@@ -77,15 +77,10 @@ std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const
                 scalardata[1],
                 scalardata[2],
                 scalardata[3],
+                sublime
             });
         }
     }
     assert(false);
-    return nullptr;
-}
-
-std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const size_t &index)
-{
-
     return nullptr;
 }

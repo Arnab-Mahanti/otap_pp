@@ -42,8 +42,8 @@ namespace OTAP
         virtual ~HFSolverBase() = default;
         Trajectory GetTrajectory() const { return m_Trajectory; }
         Fluid GetFluid() const { return m_Fluid; }
-        virtual HFResult Solve(double time = 0.0) = 0;
-        virtual HFResult Solve(double time, double Twall) = 0;
+        virtual HFResult Solve(double time = 0.0) { return {{0},{0},{0}};}
+        virtual HFResult Solve(double time, double Twall) { return Solve(); }
     };
 
     class FayRiddellSolver : public HFSolverBase
@@ -314,11 +314,6 @@ namespace OTAP
     struct ResponseSolverOptions
     {
         CoordinateType coordinateType;
-
-        int Use_Correlation_or_value_backwall_convection = 1;
-        int Back_wall_Convection_ON = 0;
-        int Backwall_wall_Radiation_loss_ON = 0;
-        bool Sublime = false; // To correct it by material library
     };
 
     // FIXME: Convert to Table
@@ -407,6 +402,9 @@ namespace OTAP
         FlowType m_FlowType;
         Fluid m_Fluid;
         HFSolver m_HFSolver;
+        size_t LOPT;
+        size_t MOPT;
+        double Tcon;
 
         ResponseSolverParams m_params;
         ResponseSolverOptions m_options;
@@ -422,8 +420,8 @@ namespace OTAP
 
     public:
         // template <typename T>
-        DefaultResponseSolver(std::shared_ptr<LayerMesh> layers, HFSolver hfsolver, TimeSeries Tinit, BCArray BCs, ResponseSolverParams params, ResponseSolverOptions options)
-            : ResponseSolverBase(layers, Tinit, BCs), m_params(params), m_options(options), m_HFSolver(hfsolver) { m_Fluid = m_HFSolver->GetFluid(); }
+        DefaultResponseSolver(std::shared_ptr<LayerMesh> layers, HFSolver hfsolver, TimeSeries Tinit, BCArray BCs, ResponseSolverParams params, ResponseSolverOptions options, size_t LOPT = 0, size_t MOPT = 1, double Tcon = 300)
+            : ResponseSolverBase(layers, Tinit, BCs), m_params(params), m_options(options), m_HFSolver(hfsolver), LOPT(LOPT), MOPT(MOPT), Tcon(Tcon) { m_Fluid = m_HFSolver->GetFluid(); }
         virtual ~DefaultResponseSolver() = default;
         virtual ResponseResult Solve() override;
     };

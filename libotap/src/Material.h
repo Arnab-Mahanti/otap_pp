@@ -24,6 +24,7 @@ namespace OTAP
         double Tabl;
         double Hpyro;
         double Habl;
+        bool sublime = false;
     };
 
     // FIXME: parse yaml
@@ -37,8 +38,8 @@ namespace OTAP
         MaterialManager(const std::string &databasePath = std::string());
         ~MaterialManager() = default;
 
-        std::shared_ptr<Material> GetMaterialInstance(const std::string &name);
-        std::shared_ptr<Material> GetMaterialInstance(const size_t &index);
+        std::shared_ptr<Material> GetMaterialInstance(const std::string &name, bool sublime = false);
+        std::shared_ptr<Material> GetMaterialInstance(const size_t &index, bool sublime = false);
     };
 
 } // namespace OTAP

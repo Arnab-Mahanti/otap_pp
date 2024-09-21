@@ -196,8 +196,8 @@ void GeometryAddPopup::Draw()
                 /// @begin Button
                 ImRad::TableNextColumn(1);
                 ImGui::Button("Add", {0, 0});
-                if (ImGui::IsItemClicked())
-                    PushGeometry();
+                if (ImGui::IsItemClicked()) {}
+                    // PushGeometry();
                 /// @end Button
 
                 /// @separator
@@ -225,15 +225,15 @@ std::string GeometryAddPopup::GetGeometryTypes() const
     return s;
 }
 
-void GeometryAddPopup::PushGeometry()
-{
-    auto &otap = OTAP::Engine::GetInstance();
-    otap.geometry.Push(
-        OTAP::GetTypeAtIndex<OTAP::GeometryPrimitiveType>(m_SelectedGeometryType),
-        m_GeometryLength,
-        m_GeometryAngle,
-        m_GeometryRadius,
-        m_GeometrySweep);
+// void GeometryAddPopup::PushGeometry()
+// {
+//     auto &otap = OTAP::Engine::GetInstance();
+//     otap.geometry.Push(
+//         OTAP::GetTypeAtIndex<OTAP::GeometryPrimitiveType>(m_SelectedGeometryType),
+//         m_GeometryLength,
+//         m_GeometryAngle,
+//         m_GeometryRadius,
+//         m_GeometrySweep);
 
-    ClosePopup(ImRad::ModalResult::Ok);
-}
+//     ClosePopup(ImRad::ModalResult::Ok);
+// }

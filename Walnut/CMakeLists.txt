@@ -74,3 +74,4 @@ target_include_directories(walnut PUBLIC "${PROJECT_SOURCE_DIR}/../libotap/src")
 target_include_directories(walnut PUBLIC "${PROJECT_SOURCE_DIR}/../libotap/vendor")
 
 # =================================
+target_compile_options(walnut PRIVATE "-Wa,-mbig-obj")

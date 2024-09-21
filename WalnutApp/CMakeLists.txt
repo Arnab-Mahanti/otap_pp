@@ -16,4 +16,5 @@ ${WALNUT_APP_SRC}
 )
 add_subdirectory(vendor/nfd)
 
-target_link_libraries(walnutapp PRIVATE walnut libotap nfd)
+target_link_libraries(walnutapp PRIVATE walnut nfd)
+target_compile_options(walnutapp PRIVATE "-Wa,-mbig-obj")

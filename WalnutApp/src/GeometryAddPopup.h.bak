@@ -30,8 +30,8 @@ private:
 
     bool isOpen = false;
 
-    void PushGeometry();
+    // void PushGeometry();
     /// @end impl
 };
 
-extern GeometryAddPopup geometryAddPopup;
+// extern GeometryAddPopup geometryAddPopup;

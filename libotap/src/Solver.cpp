@@ -1344,7 +1344,7 @@ void OTAP::DefaultResponseSolver::Instantaneous_MassRate_ThicknessSolver(double 
 
     MPD = Mass_rate_Pyrolysis;
     MCD = Mass_rate_Char;
-    if (T(0) < nodes[0].Tabl() - m_params.Ttol || Layer_thickness_1 == 0 || m_options.Sublime == 1)
+    if (T(0) < nodes[0].Tabl() - m_params.Ttol || Layer_thickness_1 == 0 || Layers[0].material->sublime)
     {
         MCD = 0;
     }
@@ -1406,7 +1406,7 @@ void OTAP::DefaultResponseSolver::Instantaneous_MassRate_ThicknessSolver(double 
             MPD = MPD / nodes[numnodes[1] - 1].Hpyro();
         }
 
-        if (m_options.Sublime)
+        if (Layers[0].material->sublime)
         {
             double VAL;
             Layer_thickness_1 = 0;
@@ -1475,8 +1475,8 @@ void OTAP::DefaultResponseSolver::DefaultResponseMatrix(Eigen::VectorXd &T, Eige
     }
 
     double MPD, MCD, CPG, Outer_radius_instantaneous, Outer_Radius, Layer_thickness_0, Layer_thickness_1, Initial_Layer_thickness_1, Initial_Layer_thickness_0;
-
-    Outer_Radius = m_params.innerRadius + Total_thickness;
+    
+    Outer_Radius =  m_params.innerRadius + Total_thickness;
     // VectorXd Layer_thickness, Initial_Layer_thickness;
 
     // for (size_t i = 0; i < Layers.GetCount(); i++)
@@ -2271,7 +2271,7 @@ OTAP::ResponseResult OTAP::DefaultResponseSolver::Solve()
                 //
                 if ((T(numnodes[1] - 1) > nodes[numnodes[1] - 1].Tpyro() - m_params.Ttol) && IXFIST == 0)
                 {
-                    if (!m_options.Sublime)
+                    if (!Layers[0].material->sublime)
                     {
                         for (int ijk = 0; ijk < numnodes[1] - 1; ijk++)
                         {

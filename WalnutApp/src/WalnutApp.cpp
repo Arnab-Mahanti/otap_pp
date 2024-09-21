@@ -8,7 +8,7 @@
 
 #include "ProjectBrowser.h"
 #include "DemoPanel.h"
-#include "GeometryViewport.h"
+// #include "GeometryViewport.h"
 #include "ResultsViewport.h"
 
 using namespace Walnut;
@@ -21,7 +21,7 @@ Walnut::Application *Walnut::CreateApplication(int argc, char **argv)
 	Walnut::Application *app = new Walnut::Application(spec);
 	app->PushLayer<ProjectBrowser>();
 	app->PushLayer<DemoPanel>();
-	app->PushLayer<GeometryViewport>();
+	// app->PushLayer<GeometryViewport>();
 	app->PushLayer<ResultsViewport>();
 
 
