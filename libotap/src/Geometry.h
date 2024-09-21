@@ -30,7 +30,7 @@ namespace OTAP
         // void Push(double length = 0.0, double angle = 0.0, double radius = 0.0, double sweep = 0.0);
 
         inline void Delete(size_t index) { m_geometryComponents.erase(m_geometryComponents.begin() + index); }
-        inline const std::vector<GeometryPrimitive> &GetComponents() const { return m_geometryComponents; }
+        inline std::vector<GeometryPrimitive> &GetComponents() { return m_geometryComponents; }
         inline size_t Count() const { return m_geometryComponents.size(); }
 
         double GetRunningLength(size_t index) const;
