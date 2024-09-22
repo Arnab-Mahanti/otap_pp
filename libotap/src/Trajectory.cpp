@@ -30,7 +30,7 @@ namespace OTAP
     }
 
     VelocityTrajectory::VelocityTrajectory(const AmbientType &ambientType, const FluidType &fluidType, const std::string &filename)
-        : m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
+        : TrajectoryBase(TrajectoryType::Velocity, ambientType, fluidType), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
     {
         ReadTrajectory(filename);
     }
@@ -152,7 +152,7 @@ namespace OTAP
     }
 
     MachTrajectory::MachTrajectory(const AmbientType &ambientType, const FluidType &fluidType, const std::string &filename)
-        : m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType)) // FIXME: What about arguments for fluids and ambient
+        : TrajectoryBase(TrajectoryType::Mach, ambientType, fluidType), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType)) // FIXME: What about arguments for fluids and ambient
     {
         ReadTrajectory(filename);
     }
@@ -251,6 +251,5 @@ namespace OTAP
     {
         return m_fluid->Lambda(GetPinf(t), GetTinf(t));
     }
-
 
 }

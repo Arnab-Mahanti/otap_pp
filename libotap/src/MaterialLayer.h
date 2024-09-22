@@ -120,6 +120,7 @@ namespace OTAP
             {
                 CreateNodes();
             }
+            assert(m_Layers.GetCount() > 0);
             assert(Tinit.size() == (m_Layers.GetCount() + 1));
 
             for (size_t j = NumNodes[0]; j < NumNodes[1]; j++)
@@ -141,6 +142,7 @@ namespace OTAP
         {
             // First Layer (one additional node)
             auto &m_Layers = *m_layers;
+            assert(m_Layers.GetCount() > 0);
             for (size_t j = 0; j < m_Layers[0].numNodes + 1; j++)
             {
                 Nodes.emplace_back(m_Layers[0].material);

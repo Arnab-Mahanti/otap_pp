@@ -17,6 +17,11 @@ namespace OTAP
     class TrajectoryBase
     {
     public:
+        const TrajectoryType trajectoryType;
+        const AmbientType ambientType;
+        const FluidType fluidType;
+        TrajectoryBase(TrajectoryType t, AmbientType a, FluidType f)
+            : trajectoryType(t), ambientType(a), fluidType(f) {}
         virtual ~TrajectoryBase() = default;
         virtual double GetFreeStream() const { assert(false); };
         virtual TimeSeries GetPinf(TimePoints) const { assert(false); };
@@ -50,7 +55,7 @@ namespace OTAP
 
     public:
         VelocityTrajectory(const AmbientType &ambientType, const FluidType &fluidType, TimePoints &time, const TimeSeries &altitude, const TimeSeries &velocity, const TimeSeries &alpha)
-            : m_timepoints(time), m_altitude(altitude), m_velocity(velocity), m_alpha(alpha), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
+            : TrajectoryBase(TrajectoryType::Velocity, ambientType,fluidType), m_timepoints(time), m_altitude(altitude), m_velocity(velocity), m_alpha(alpha), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
         {
         }
 
@@ -85,7 +90,7 @@ namespace OTAP
 
     public:
         MachTrajectory(const AmbientType &ambientType, const FluidType &fluidType, TimePoints &time, const TimeSeries &altitude, const TimeSeries &mach, const TimeSeries &alpha)
-            : m_timepoints(time), m_altitude(altitude), m_mach(mach), m_alpha(alpha), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
+            : TrajectoryBase(TrajectoryType::Mach ,ambientType,fluidType), m_timepoints(time), m_altitude(altitude), m_mach(mach), m_alpha(alpha), m_ambient(make_ambient(ambientType)), m_fluid(make_fluid(fluidType))
         {
         }
 
@@ -106,7 +111,6 @@ namespace OTAP
         virtual double GetVinf(double) const override;
         virtual double GetLambdainf(double) const override;
     };
-
 
     // NOTE: Disabled template system
 

@@ -20,7 +20,7 @@ namespace OTAP
     class State
     {
     private:
-        static inline State* state = nullptr;
+        static inline State *state = nullptr;
 
         State() = default;
         ~State() = default;
@@ -32,7 +32,7 @@ namespace OTAP
     public:
         // static inline auto materialManager = MaterialManager("I:/Arnab/Projects/MISC/OTAP++/docs/material_databse.yaml");
         std::unordered_map<std::string, std::shared_ptr<Geometry>> geometries;
-        std::vector<Trajectory> trajectories;
+        std::unordered_map<std::string, std::pair<std::string, Trajectory>> trajectories;
         BCArray bcs;
         std::vector<std::shared_ptr<Material>> localMaterials;
         std::vector<std::shared_ptr<LayerStack>> layerstacks;
@@ -42,7 +42,7 @@ namespace OTAP
         static State &GetInstance()
         {
             if (!state)
-                state= new State();
+                state = new State();
             return *state;
         }
 

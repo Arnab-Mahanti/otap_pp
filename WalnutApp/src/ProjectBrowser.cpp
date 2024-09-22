@@ -18,149 +18,6 @@ void ProjectBrowser::OnDetach()
     isOpen = false;
 }
 
-// void ProjectBrowser::OnUIRender()
-// {
-//     /// @style test
-//     /// @unit px
-//     /// @begin TopWindow
-//     auto *ioUserData = (ImRad::IOUserData *)ImGui::GetIO().UserData;
-//     ImGui::SetNextWindowSize({300, 800}, ImGuiCond_FirstUseEver);
-//     // TODO: Remove close buttons
-//     if (isOpen && ImGui::Begin("Project Browser###ProjectBrowser", nullptr, ImGuiWindowFlags_NoCollapse))
-//     {
-//         /// @separator
-
-//         /// @begin CollapsingHeader
-//         ImGui::SetNextItemOpen(false, ImGuiCond_Appearing);
-//         if (ImGui::CollapsingHeader("Geometry"))
-//         {
-//             /// @separator
-
-//             /// @begin Table
-//             if (ImGui::BeginTable("table1", 2,
-//                                   ImGuiTableFlags_BordersInnerH |
-//                                       ImGuiTableFlags_BordersInnerV |
-//                                       ImGuiTableFlags_BordersOuterH |
-//                                       ImGuiTableFlags_BordersOuterV |
-//                                       ImGuiTableFlags_Hideable |
-//                                       ImGuiTableFlags_RowBg,
-//                                   {0, 0}))
-//             {
-//                 ImGui::TableSetupColumn("A", ImGuiTableColumnFlags_None, 0);
-//                 ImGui::TableSetupColumn("B", ImGuiTableColumnFlags_None, 0);
-
-//                 /// @separator
-
-//                 auto &component = m_state.geometry.GetComponents();
-//                 /// @begin Text
-//                 ImGui::TableNextRow(0, 0);
-//                 ImGui::TableSetColumnIndex(0);
-//                 ImGui::TextUnformatted(
-//                     OTAP::GetNameFromType(component[0].type).c_str());
-//                 for (size_t i = 1; i < m_state.geometry.Count(); i++)
-//                 {
-//                     ImGui::TableNextRow(0, 0);
-//                     ImGui::TableSetColumnIndex(0);
-//                     ImGui::TextUnformatted(
-//                         OTAP::GetNameFromType(component[i].type).c_str());
-//                     ImGui::TableSetColumnIndex(1);
-//                     ImGui::PushItemWidth(-std::numeric_limits<float>::epsilon());
-//                     ImGui::PushID(i);
-//                     if (ImGui::Button("Delete"))
-//                     {
-//                         OnGeometryDelete(i);
-//                     }
-//                     ImGui::PopID();
-//                 }
-//                 /// @end Text
-
-//                 /// @separator
-//                 ImGui::EndTable();
-//             }
-//             /// @end Table
-
-//             /// @begin Button
-//             ImGui::Indent(1 * ImGui::GetStyle().IndentSpacing / 2);
-//             ImGui::Button("Add", {0, 0});
-//             if (ImGui::IsItemHovered(ImGuiHoveredFlags_None))
-//                 ImGui::SetTooltip("Adds geometry to the stack");
-//             if (ImGui::IsItemClicked())
-//                 geometryAddPopup.OpenPopup();
-//             geometryAddPopup.Draw();
-//             /// @end Button
-
-//             /// @separator
-//         }
-//         /// @end CollapsingHeader
-
-//         /// @begin CollapsingHeader
-//         ImGui::SetNextItemOpen(false, ImGuiCond_Appearing);
-//         if (ImGui::CollapsingHeader("Trajectory"))
-//         {
-//             /// @separator
-
-//             /// @begin Table
-//             if (ImGui::BeginTable("table2", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_SizingFixedSame | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX, {0, 0}))
-//             {
-//                 ImGui::TableSetupColumn("item1", ImGuiTableColumnFlags_WidthStretch, 0);
-//                 ImGui::TableSetupColumn("spacing1", ImGuiTableColumnFlags_WidthFixed, 8);
-//                 ImGui::TableSetupColumn("item2", ImGuiTableColumnFlags_WidthStretch, 0);
-//                 ImGui::TableNextRow(0, 0);
-//                 ImGui::TableSetColumnIndex(0);
-//                 /// @separator
-
-//                 /// @begin Text
-//                 ImGui::TextUnformatted("Type");
-//                 /// @end Text
-
-//                 /// @begin Combo
-//                 ImRad::TableNextColumn(2);
-//                 ImGui::SetNextItemWidth(200);
-//                 ImGui::Combo("##SelectedTrajectory", &m_SelectedTrajectoryType, OTAP::GetTypes<OTAP::TrajectoryType>().c_str());
-//                 /// @end Combo
-
-//                 /// @separator
-
-//                 ImGui::TableNextRow(0, 0);
-//                 ImGui::TableSetColumnIndex(0);
-//                 ImGui::TextUnformatted("File Name");
-//                 ImRad::TableNextColumn(2);
-//                 ImGui::SetNextItemWidth(200);
-//                 ImGui::BeginDisabled();
-//                 ImGui::TextUnformatted(m_TrajectoryFile.c_str());
-//                 ImGui::EndDisabled();
-//                 ImGui::SameLine();
-//                 if (ImGui::Button("..."))
-//                 {
-//                     NFD::Guard nfdGuard;
-//                     NFD::UniquePath outPath;
-//                     nfdfilteritem_t filterItem[1] = {{"Text", "txt"}};
-
-//                     nfdresult_t result = NFD::OpenDialog(outPath, filterItem, 1);
-//                     if (result == NFD_OKAY)
-//                     {
-//                         m_TrajectoryFile = outPath.get();
-//                     }
-//                 }
-//                 if (ImGui::Button("OK"))
-//                 {
-//                     OnTrajectoryAdd();
-//                 }
-
-//                 ImGui::EndTable();
-//             }
-//             /// @end Table
-
-//             /// @separator
-//         }
-//         /// @end CollapsingHeader
-
-//         /// @separator
-//         ImGui::End();
-//     }
-//     /// @end TopWindow
-// }
-
 void ProjectBrowser::OnUIRender()
 {
     auto *ioUserData = (ImRad::IOUserData *)ImGui::GetIO().UserData;
@@ -193,37 +50,63 @@ void ProjectBrowser::ShowGeometry()
     // Geometry
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+
     if (ImGui::TreeNodeEx("Geometry", ImGuiTreeNodeFlags_SpanFullWidth))
     {
         // List all geometries
         for (auto &&geometry : m_state.geometries)
         {
-            if (ImGui::TreeNodeEx(geometry.first.c_str(), ImGuiTreeNodeFlags_SpanFullWidth))
+            bool geometry_node_open = ImGui::TreeNodeEx(geometry.first.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+            ImGui::PushID(geometry.first.c_str());
+            if (ImGui::BeginPopupContextItem("##geom_delete"))
+            {
+                if (ImGui::Button("Delete"))
+                {
+                    m_state.geometries.erase(geometry.first);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+            if (geometry_node_open)
             {
                 // List all geometry componenets
-                auto components = geometry.second->GetComponents();
+                auto &components = geometry.second->GetComponents();
                 for (size_t i = 0; i < components.size(); i++)
                 {
+                    ImGui::PushID(i);
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::TreeNodeEx(
                         OTAP::GetNameFromType(components[i].type).c_str(),
                         ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                    if (i > 0)
                     {
-                        OnGeometryPrimitiveAdd(*geometry.second, true, i);
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        {
+                            ImGui::OpenPopup("Add Geometry Primitive");
+                        }
+                        OnGeometryPrimitiveAdd(*geometry.second, i);
+                        ImGui::TableNextColumn();
+                        if (ImGui::SmallButton(" - "))
+                        {
+                            components.erase(components.begin() + i);
+                        }
                     }
+                    ImGui::PopID();
                 }
-                ImGui::TreePop();
+                ImGui::TreePop(); // individual geometry
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::PushID(geometry.first.c_str());
                 if (ImGui::Button(" + "))
                     ImGui::OpenPopup("Add Geometry Primitive");
                 OnGeometryPrimitiveAdd(*(geometry.second));
+                ImGui::PopID();
             }
         }
-        ImGui::TreePop();
+        ImGui::TreePop(); // all geometry
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
@@ -233,23 +116,25 @@ void ProjectBrowser::ShowGeometry()
     }
 }
 
-void ProjectBrowser::OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, bool edit, size_t editindex)
+void ProjectBrowser::OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, size_t editindex)
 {
-    if (edit)
-    {
-        m_SelectedGeometryType = (int)geometry.GetComponents()[editindex].type;
-        m_GeometryLength = geometry.GetComponents()[editindex].length;
-        m_GeometryAngle = geometry.GetComponents()[editindex].angle;
-        m_GeometryRadius = geometry.GetComponents()[editindex].radius;
-        m_GeometrySweep = geometry.GetComponents()[editindex].lambda;
-    }
-
+    static bool editing = false;
     const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
     const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
     ImGui::SetNextWindowSize(ImVec2(300, 225));
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopup("Add Geometry Primitive", ImGuiWindowFlags_NoResize ^ ImGuiWindowFlags_NoTitleBar))
+    if (ImGui::BeginPopupModal("Add Geometry Primitive", &isOpen, ImGuiWindowFlags_NoResize ^ ImGuiWindowFlags_NoTitleBar))
     {
+        if (editindex && !editing)
+        {
+            m_SelectedGeometryType = (int)geometry.GetComponents()[editindex].type;
+            m_GeometryLength = geometry.GetComponents()[editindex].length;
+            m_GeometryAngle = geometry.GetComponents()[editindex].angle;
+            m_GeometryRadius = geometry.GetComponents()[editindex].radius;
+            m_GeometrySweep = geometry.GetComponents()[editindex].lambda;
+
+            editing = true;
+        }
         if (ImGui::BeginTable("add_primitive", 2, flags ^ ImGuiTableFlags_Resizable))
         {
             ImGui::TableSetupColumn("data", ImGuiTableColumnFlags_NoHide);
@@ -298,7 +183,15 @@ void ProjectBrowser::OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, bool edit,
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (ImGui::Button(" OK "))
             {
-                if (edit)
+                if (m_SelectedGeometryType == (int)OTAP::GeometryPrimitiveType::Arc && editindex == 1)
+                {
+                    geometry.GetComponents()[editindex].type = (OTAP::GeometryPrimitiveType)m_SelectedGeometryType;
+                    geometry.GetComponents()[editindex].angle = m_GeometryAngle;
+                    geometry.GetComponents()[editindex].length = m_GeometryLength;
+                    geometry.GetComponents()[editindex].radius = m_GeometryRadius;
+                    geometry.GetComponents()[editindex].lambda = m_GeometrySweep;
+                }
+                else if (editindex && m_SelectedGeometryType != (int)OTAP::GeometryPrimitiveType::Arc)
                 {
                     geometry.GetComponents()[editindex].type = (OTAP::GeometryPrimitiveType)m_SelectedGeometryType;
                     geometry.GetComponents()[editindex].angle = m_GeometryAngle;
@@ -320,6 +213,7 @@ void ProjectBrowser::OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, bool edit,
                 m_GeometryAngle = 0;
                 m_GeometryRadius = 0;
                 m_GeometrySweep = 0;
+                editing = false;
             }
             ImGui::EndTable();
         }
@@ -345,8 +239,9 @@ void ProjectBrowser::OnGeometryAdd()
             ImGui::TableNextColumn();
             if (ImGui::Button(" OK "))
             {
-                m_state.geometries[m_geometryName] = std::make_shared<OTAP::Geometry>(); 
-                const auto count = m_state.geometries.size();
+                static size_t count = 0;
+                m_state.geometries[m_geometryName] = std::make_shared<OTAP::Geometry>();
+                count++;
                 const auto name = "Geom {" + std::to_string(count) + "}";
                 std::strncpy(m_geometryName, name.c_str(), std::min(name.size(), size_t(IM_ARRAYSIZE(m_geometryName))));
                 ImGui::CloseCurrentPopup();
@@ -357,20 +252,212 @@ void ProjectBrowser::OnGeometryAdd()
     }
 }
 
-void ProjectBrowser::OnGeometryDelete(size_t index)
-{
-    // m_state.geometry.Delete(index);
-}
-
 void ProjectBrowser::ShowTrajectory()
 {
+    // Trajectory
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+
+    if (ImGui::TreeNodeEx("Trajectory", ImGuiTreeNodeFlags_SpanFullWidth))
+    {
+        // List all trajectories
+        for (auto &&trajectory : m_state.trajectories)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            bool trajectory_node_open = ImGui::TreeNodeEx(trajectory.first.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+
+            ImGui::PushID(trajectory.first.c_str());
+            if (ImGui::BeginPopupContextItem("##traj_delete"))
+            {
+                if (ImGui::Button("Delete"))
+                {
+                    m_state.trajectories.erase(trajectory.first);
+                    ImGui::CloseCurrentPopup();
+                }
+
+                if (ImGui::Button("Edit"))
+                {
+                    auto traj = trajectory.second.second;
+
+                    m_SelectedTrajectoryType = traj ? (int)traj->trajectoryType : -1;
+                    m_SelectedFluidType = traj ? (int)traj->fluidType : -1;
+                    m_SelectedAmbientType = traj ? (int)traj->ambientType : -1;
+
+                    ImGui::OpenPopup("Edit Trajectory");
+                }
+                OnTrajectoryEdit(trajectory);
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+
+            if (trajectory_node_open)
+            {
+                // List all trajectory settings
+
+                {
+                    ImGui::PushID(trajectory.first.c_str());
+
+                    auto traj = trajectory.second.second;
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted("Type");
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::TextUnformatted(
+                        traj ? OTAP::GetNameFromType<OTAP::TrajectoryType>(traj->trajectoryType).c_str() : "");
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted("Fluid");
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::TextUnformatted(
+                        traj ? OTAP::GetNameFromType<OTAP::FluidType>(traj->fluidType).c_str() : "");
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted("Ambient");
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::TextUnformatted(
+                        traj ? OTAP::GetNameFromType<OTAP::AmbientType>(traj->ambientType).c_str() : "");
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted("File");
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::TextUnformatted(
+                        traj ? trajectory.second.first.c_str() : "");
+
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop(); // individual geometry
+            }
+        }
+        ImGui::TreePop(); // all geometry
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::Button(" + "))
+            ImGui::OpenPopup("Add Trajectory");
+        OnTrajectoryAdd();
+    }
 }
 
 void ProjectBrowser::OnTrajectoryAdd()
 {
-    // m_state.trajectory.reset(OTAP::make_trajectory(
-    //     OTAP::GetTypeAtIndex<OTAP::TrajectoryType>(m_SelectedTrajectoryType),
-    //     m_TrajectoryFile));
+    const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
+    const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
+    if (ImGui::BeginPopup("Add Trajectory"))
+    {
+        if (ImGui::BeginTable("2way", 2, flags))
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Name");
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(15 * TEXT_BASE_WIDTH);
+            ImGui::InputText("##traj_name", m_trajectoryName, IM_ARRAYSIZE(m_trajectoryName), ImGuiInputTextFlags_AutoSelectAll);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::Button(" OK "))
+            {
+                static size_t count = 0;
+                m_state.trajectories[m_trajectoryName] = std::make_pair("", OTAP::Trajectory());
+                count++;
+                const auto name = "Traj {" + std::to_string(count) + "}";
+                std::strncpy(m_trajectoryName, name.c_str(), std::min(name.size(), size_t(IM_ARRAYSIZE(m_trajectoryName))));
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndTable();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void ProjectBrowser::OnTrajectoryEdit(std::pair<const std::string, std::pair<std::string, OTAP::Trajectory>> &trajectory)
+{
+    const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
+    const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
+    // ImGui::PushID(trajectory.first.c_str());
+    if (ImGui::BeginPopupModal("Edit Trajectory"))
+    {
+        if (ImGui::BeginTable("3way", 3, flags ^ ImGuiTableFlags_Resizable))
+        {
+            {
+                // m_TrajectoryFile = traj ? (int)trajectory.second.first.c_str() : "Enter Trajectory File";
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("Type");
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::Combo("##m_SelectedTrajectoryType",
+                             &m_SelectedTrajectoryType,
+                             OTAP::GetTypes<OTAP::TrajectoryType>().c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("Fluid");
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::Combo("##m_SelectedFluidType",
+                             &m_SelectedFluidType,
+                             OTAP::GetTypes<OTAP::FluidType>().c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("Ambient");
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::Combo("##m_SelectedAmbientType",
+                             &m_SelectedAmbientType,
+                             OTAP::GetTypes<OTAP::AmbientType>().c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("File");
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::InputText("##traj_name", m_TrajectoryFile, IM_ARRAYSIZE(m_trajectoryName), ImGuiInputTextFlags_AutoSelectAll);
+                ImGui::TableNextColumn();
+                if (ImGui::SmallButton("..."))
+                {
+                    NFD::Guard nfdGuard;
+                    NFD::UniquePath outPath;
+
+                    nfdfilteritem_t filterItem[1] = {{"Datafile", "dat,txt,csv"}};
+
+                    nfdresult_t result = NFD::OpenDialog(outPath, filterItem, 1);
+                    if (result == NFD_OKAY)
+                    {
+                        std::strncpy(m_TrajectoryFile, outPath.get(), std::min(std::strlen(outPath.get()), size_t(IM_ARRAYSIZE(m_TrajectoryFile))));
+                    }
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                if (ImGui::Button("OK"))
+                {
+                    trajectory.second.first = m_TrajectoryFile;
+                    trajectory.second.second = OTAP::make_trajectory(
+                        OTAP::GetTypeAtIndex<OTAP::TrajectoryType>(m_SelectedTrajectoryType),
+                        OTAP::GetTypeAtIndex<OTAP::AmbientType>(m_SelectedAmbientType),
+                        OTAP::GetTypeAtIndex<OTAP::FluidType>(m_SelectedFluidType),
+                        trajectory.second.first);
+                    ImGui::CloseCurrentPopup(); // this modal popup
+                }
+            }
+
+            ImGui::EndTable();
+        }
+        ImGui::EndPopup();
+    }
+    // ImGui::PopID();
 }
 
 void ProjectBrowser::OnUpdate(float ts)

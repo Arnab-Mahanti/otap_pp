@@ -22,14 +22,13 @@ public:
 
 private:
     // General
-    
+
     bool isOpen = true;
     bool p_open = false;
     OTAP::State &m_state = OTAP::State::GetInstance();
 
-    // Geometry 
+    // Geometry
     bool m_AddGeom = false;
-    int m_SelectedTrajectoryType = -1;
     int m_SelectedGeometryType = -1;
     double m_GeometryLength = 0.0;
     double m_GeometryRadius = 0.0;
@@ -39,14 +38,18 @@ private:
 
     void OnGeometryAdd();
     void OnGeometryDelete(size_t index);
-    void OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, bool edit = false, size_t editindex = 0);
+    void OnGeometryPrimitiveAdd(OTAP::Geometry &geometry, size_t editindex = 0);
     void ShowGeometry();
 
     // Trajectory
-    std::unordered_map<std::string, OTAP::Trajectory> m_Trajectories;
-    std::string m_TrajectoryFile = "Enter Trajectory File";
+    char m_trajectoryName[50] = "Traj {0}";
+    char m_TrajectoryFile[500] = "Enter Trajectory File";
+    int m_SelectedTrajectoryType = -1;
+    int m_SelectedFluidType = -1;
+    int m_SelectedAmbientType = -1;
 
     void OnTrajectoryAdd();
+    void OnTrajectoryEdit(std::pair<const std::string, std::pair<std::string, OTAP::Trajectory>> &trajectory);
     void OnTrajectoryDelete(size_t index);
     void ShowTrajectory();
 };
