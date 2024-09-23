@@ -39,6 +39,7 @@ namespace OTAP
         ~MaterialManager() = default;
 
         std::shared_ptr<Material> GetMaterialInstance(const std::string &name, bool sublime = false);
+        std::vector<std::string> GetMaterialList();
         std::shared_ptr<Material> GetMaterialInstance(const size_t &index, bool sublime = false);
     };
 

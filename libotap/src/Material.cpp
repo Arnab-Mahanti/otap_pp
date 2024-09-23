@@ -19,7 +19,7 @@ std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const
         auto dataid = m_database["data"].id();
         if (m_database.find_child(dataid, ryml::to_csubstr(name)) != ryml::NONE)
         {
-            //TODO: Read directly from schema
+            // TODO: Read directly from schema
             constexpr char *tabularkeys[] =
                 {
                     "density",
@@ -77,10 +77,20 @@ std::shared_ptr<OTAP::Material> OTAP::MaterialManager::GetMaterialInstance(const
                 scalardata[1],
                 scalardata[2],
                 scalardata[3],
-                sublime
-            });
+                sublime});
         }
     }
     assert(false);
     return nullptr;
+}
+
+std::vector<std::string> OTAP::MaterialManager::GetMaterialList()
+{
+    std::vector<std::string> names;
+    for (auto &&mat : m_database["data"].children())
+    {
+        auto key = mat.key();
+        names.emplace_back(key.begin(), key.end());
+    }
+    return names;
 }

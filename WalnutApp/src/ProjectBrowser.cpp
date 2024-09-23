@@ -38,6 +38,7 @@ void ProjectBrowser::OnUIRender()
             // Show various sections
             ShowGeometry();
             ShowTrajectory();
+            ShowLayerStack();
 
             ImGui::EndTable();
         }
@@ -110,7 +111,7 @@ void ProjectBrowser::ShowGeometry()
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::Button(" + "))
+        if (ImGui::Button(" + ##geom"))
             ImGui::OpenPopup("Add Geometry");
         OnGeometryAdd();
     }
@@ -227,7 +228,7 @@ void ProjectBrowser::OnGeometryAdd()
     const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
     if (ImGui::BeginPopup("Add Geometry"))
     {
-        if (ImGui::BeginTable("2way", 2, flags))
+        if (ImGui::BeginTable("2way##geom", 2, flags))
         {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -342,7 +343,7 @@ void ProjectBrowser::ShowTrajectory()
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::Button(" + "))
+        if (ImGui::Button(" + ##traj"))
             ImGui::OpenPopup("Add Trajectory");
         OnTrajectoryAdd();
     }
@@ -354,7 +355,7 @@ void ProjectBrowser::OnTrajectoryAdd()
     const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
     if (ImGui::BeginPopup("Add Trajectory"))
     {
-        if (ImGui::BeginTable("2way", 2, flags))
+        if (ImGui::BeginTable("2way##traj", 2, flags))
         {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -458,6 +459,193 @@ void ProjectBrowser::OnTrajectoryEdit(std::pair<const std::string, std::pair<std
         ImGui::EndPopup();
     }
     // ImGui::PopID();
+}
+
+void ProjectBrowser::ShowLayerStack()
+{
+    // LayerStack
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+
+    if (ImGui::TreeNodeEx("LayerStacks", ImGuiTreeNodeFlags_SpanFullWidth))
+    {
+        // List all LayerStacks
+        for (auto &&layerstack : m_state.layerstacks)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            bool layerstack_node_open = ImGui::TreeNodeEx(layerstack.first.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+
+            ImGui::PushID(layerstack.first.c_str());
+            if (ImGui::BeginPopupContextItem("##ls_delete"))
+            {
+                if (ImGui::Button("Delete"))
+                {
+                    m_state.layerstacks.erase(layerstack.first);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+
+            if (layerstack_node_open)
+            {
+                // List all layers
+                for (size_t i = 0; i < layerstack.second->GetCount(); i++)
+                {
+                    ImGui::PushID(i);
+
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TreeNodeEx(
+                            ("Layer " + std::to_string(i)).c_str(),
+                            ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
+
+                        ImGui::TableNextColumn();
+                        if (ImGui::SmallButton(" - "))
+                        {
+                            layerstack.second->Delete(i);
+                        }
+                    }
+
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop(); // individual layerstack
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::Button(" + ##layer"))
+                    ImGui::OpenPopup("Add Layer");
+                OnLayerAdd(*layerstack.second);
+            }
+            ImGui::PopID();
+        }
+        ImGui::TreePop(); // all layerstacks
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::Button(" + ##layerstack"))
+            ImGui::OpenPopup("Add LayerStack");
+        OnLayerStackAdd();
+    }
+}
+
+void ProjectBrowser::OnLayerStackAdd()
+{
+    const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
+    const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
+    if (ImGui::BeginPopup("Add LayerStack"))
+    {
+        if (ImGui::BeginTable("2way##ls", 2, flags))
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Name");
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(15 * TEXT_BASE_WIDTH);
+            ImGui::InputText("##ls_name", m_layerstackName, IM_ARRAYSIZE(m_layerstackName), ImGuiInputTextFlags_AutoSelectAll);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::Button(" OK "))
+            {
+                static size_t count = 0;
+                m_state.layerstacks[m_layerstackName] = std::make_shared<OTAP::LayerStack>();
+                count++;
+                const auto name = "LayerStack {" + std::to_string(count) + "}";
+                std::strncpy(m_layerstackName, name.c_str(), std::min(name.size(), size_t(IM_ARRAYSIZE(m_layerstackName))));
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndTable();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void ProjectBrowser::OnLayerAdd(OTAP::LayerStack &layerstack)
+{
+    static bool editing = false;
+    const float TEXT_BASE_WIDTH = ImGui::CalcTextSize("A").x;
+    const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
+    ImGui::SetNextWindowSize(ImVec2(300, 225));
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    static auto matnames = m_state.materialManager.GetMaterialList();
+
+    if (ImGui::BeginPopupModal("Add Layer", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar))
+    {
+        static int item_current_idx = 0;                                      // Here we store our selection data as an index.
+        const char *combo_preview_value = matnames[item_current_idx].c_str(); // Pass in the preview value visible before opening the combo (it could be anything)
+
+        // if (editindex && !editing)
+        // {
+        //     item_current_idx = (int)geometry.GetComponents()[editindex].type;
+        //     m_GeometryLength = geometry.GetComponents()[editindex].length;
+        //     m_GeometryAngle = geometry.GetComponents()[editindex].angle;
+        //     m_GeometryRadius = geometry.GetComponents()[editindex].radius;
+        //     m_GeometrySweep = geometry.GetComponents()[editindex].lambda;
+
+        //     editing = true;
+        // }
+
+        if (ImGui::BeginTable("add_layer", 2, flags ^ ImGuiTableFlags_Resizable))
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Material");
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+
+            if (ImGui::BeginCombo("##Select Material", combo_preview_value))
+            {
+                for (int n = 0; n < matnames.size(); n++)
+                {
+                    const bool is_selected = (item_current_idx == n);
+                    if (ImGui::Selectable(matnames[n].c_str(), is_selected))
+                        item_current_idx = n;
+
+                    // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            static bool sublime = false;
+            ImGui::Checkbox("Sublime", &sublime);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Thickness");
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputFloat("##layer_thickness", &m_layerThickness, 0.0001, 0.001, "%.6f");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Nodes");
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputInt("##layer_numnodes", &m_layerNumnodes, 1, 10);
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("OK ##add_layer"))
+        {
+            layerstack.Emplace(m_state.materialManager.GetMaterialInstance(matnames[item_current_idx]),
+                               std::max(0.0, (double)m_layerThickness),
+                               (size_t)m_layerNumnodes);
+            m_layerThickness = 0;
+            m_layerNumnodes = 0;
+
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }
 
 void ProjectBrowser::OnUpdate(float ts)

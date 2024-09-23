@@ -52,6 +52,14 @@ private:
     void OnTrajectoryEdit(std::pair<const std::string, std::pair<std::string, OTAP::Trajectory>> &trajectory);
     void OnTrajectoryDelete(size_t index);
     void ShowTrajectory();
+
+    // LayerStack
+    char m_layerstackName[50] = "LayerStack {0}";
+    float m_layerThickness = 0;
+    int m_layerNumnodes = 0;
+    void ShowLayerStack();
+    void OnLayerStackAdd();
+    void OnLayerAdd(OTAP::LayerStack& layerstack);
 };
 
 // extern ProjectBrowser projectBrowser;

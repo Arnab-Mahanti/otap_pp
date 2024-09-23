@@ -30,12 +30,12 @@ namespace OTAP
         // friend class cereal::access;
 
     public:
-        // static inline auto materialManager = MaterialManager("I:/Arnab/Projects/MISC/OTAP++/docs/material_databse.yaml");
+        static inline auto materialManager = MaterialManager("C:/Users/Arnab Mahanti/source/repos/otap_pp/docs/material_database.yaml");
         std::unordered_map<std::string, std::shared_ptr<Geometry>> geometries;
         std::unordered_map<std::string, std::pair<std::string, Trajectory>> trajectories;
+        std::unordered_map<std::string, std::shared_ptr<LayerStack>> layerstacks;
         BCArray bcs;
         std::vector<std::shared_ptr<Material>> localMaterials;
-        std::vector<std::shared_ptr<LayerStack>> layerstacks;
 
         std::vector<std::shared_ptr<ResponseProblem>> solutions;
 
