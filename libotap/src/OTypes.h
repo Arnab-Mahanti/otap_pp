@@ -135,6 +135,18 @@ namespace OTAP
     }
 
     template <typename T>
+    constexpr auto GetTypesAsStrings()
+    {
+        auto types = magic_enum::enum_names<T>();
+        std::vector<std::string> s;
+        for (auto &&i : types)
+        {
+            s.emplace_back(i);
+        }
+        return s;
+    }
+
+    template <typename T>
     auto GetTypeAtIndex(int i)
     {
         return magic_enum::enum_values<T>()[i];

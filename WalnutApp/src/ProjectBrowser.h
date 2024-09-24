@@ -59,7 +59,23 @@ private:
     int m_layerNumnodes = 0;
     void ShowLayerStack();
     void OnLayerStackAdd();
-    void OnLayerAdd(OTAP::LayerStack& layerstack);
+    void OnLayerAdd(OTAP::LayerStack &layerstack, bool editing = false, size_t index = 0);
+
+    // Boundary Conditions
+    char m_hfilename[500] = "";
+    char m_tgfilename[500] = "";
+    char m_bcName[50] = "BC {0}";
+    static inline size_t bcnamecount = 0;
+
+    void ShowBC();
+    void ShowBCchoices();
+    void EditBC(const std::pair<const std::string, OTAP::BC> &, bool&);
+    bool AddConvectionBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
+    bool AddFluxBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
+    bool AddHeatGenBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
+    bool AddNaturalConvectionBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
+    bool AddPropellantMassBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
+    bool AddRadiationBC(int &done, bool& editting, const std::pair<const std::string, OTAP::BC> & bc = {"",OTAP::BC()});
 };
 
 // extern ProjectBrowser projectBrowser;

@@ -34,7 +34,7 @@ namespace OTAP
         std::unordered_map<std::string, std::shared_ptr<Geometry>> geometries;
         std::unordered_map<std::string, std::pair<std::string, Trajectory>> trajectories;
         std::unordered_map<std::string, std::shared_ptr<LayerStack>> layerstacks;
-        BCArray bcs;
+        std::unordered_map<std::string, BC> bcs;
         std::vector<std::shared_ptr<Material>> localMaterials;
 
         std::vector<std::shared_ptr<ResponseProblem>> solutions;
